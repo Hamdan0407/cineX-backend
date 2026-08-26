@@ -1,0 +1,127 @@
+package com.bookmyshow.service;
+
+import com.bookmyshow.dto.TheatreDto;
+import com.bookmyshow.entity.Theatre;
+import com.bookmyshow.repository.TheatreRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.stereotype.Service;
+import java.util.List;
+import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+
+import com.bookmyshow.exception.ResourceNotFoundException;
+
+@Slf4j
+@Service
+public class TheatreService {
+    private final TheatreRepository theatreRepository;
+
+    public TheatreService(TheatreRepository theatreRepository) {
+        this.theatreRepository = theatreRepository;
+    }
+
+    @Caching(evict = {
+        @CacheEvict(value = "theatres", allEntries = true),
+        @CacheEvict(value = "cities", allEntries = true)
+    })
+    public TheatreDto addTheatre(TheatreDto dto) {
+        log.info("Adding new theatre: {} in {}", dto.getName(), dto.getCity());
+        Theatre theatre = new Theatre();
+        theatre.setName(dto.getName());
+        theatre.setCity(dto.getCity());
+        theatre.setAddress(dto.getAddress());
+        theatre.setAmenities(dto.getAmenities());
+        
+        Theatre saved = theatreRepository.save(theatre);
+        return mapToDto(saved);
+    }
+
+    @Caching(evict = {
+        @CacheEvict(value = "theatres", allEntries = true),
+        @CacheEvict(value = "cities", allEntries = true)
+    })
+    public TheatreDto updateTheatre(Long id, TheatreDto dto) {
+        log.info("Updating theatre id: {}", id);
+        Theatre theatre = theatreRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Theatre not found"));
+        theatre.setName(dto.getName());
+        theatre.setCity(dto.getCity());
+        theatre.setAddress(dto.getAddress());
+        if (dto.getAmenities() != null) theatre.setAmenities(dto.getAmenities());
+
+        Theatre updated = theatreRepository.save(theatre);
+        return mapToDto(updated);
+    }
+
+    @Caching(evict = {
+        @CacheEvict(value = "theatres", allEntries = true),
+        @CacheEvict(value = "cities", allEntries = true)
+    })
+    public void deleteTheatre(Long id) {
+        log.info("Deleting theatre id: {}", id);
+        if (!theatreRepository.existsById(id)) {
+            throw new ResourceNotFoundException("Theatre not found");
+        }
+        theatreRepository.deleteById(id);
+    }
+
+    @Cacheable(value = "theatres", key = "'all'")
+    public List<TheatreDto> getAllTheatres() {
+        log.info("Cache Miss: Fetching all theatres from MySQL database");
+        return theatreRepository.findAll().stream().map(this::mapToDto).collect(Collectors.toList());
+    }
+
+    @Cacheable(value = "theatres", key = "#id")
+    public TheatreDto getTheatreById(Long id) {
+        log.info("Cache Miss: Fetching theatre id {} from MySQL database", id);
+        return theatreRepository.findById(id).map(this::mapToDto)
+            .orElseThrow(() -> new ResourceNotFoundException("Theatre not found"));
+    }
+
+    @Cacheable(value = "theatres", key = "'city_' + #city.toLowerCase()")
+    public List<TheatreDto> getTheatresByCity(String city) {
+        log.info("Cache Miss: Fetching theatres for city {} from MySQL database", city);
+        return theatreRepository.findByCityIgnoreCase(city)
+            .stream().map(this::mapToDto).collect(Collectors.toList());
+    }
+
+    @Cacheable(value = "cities", key = "'all'")
+    public List<String> getAllCities() {
+        log.info("Cache Miss: Fetching all distinct cities from MySQL database");
+        return theatreRepository.findAll().stream()
+            .map(Theatre::getCity)
+            .filter(c -> c != null && !c.trim().isEmpty())
+            .distinct()
+            .sorted()
+            .collect(Collectors.toList());
+    }
+
+    public Page<TheatreDto> getTheatresPaginated(int page, int size, String sortBy, String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return theatreRepository.findAll(pageable).map(this::mapToDto);
+    }
+
+    public Page<TheatreDto> searchTheatresPaginated(String query, int page, int size, String sortBy, String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return theatreRepository.findByNameContainingIgnoreCaseOrCityIgnoreCaseOrAddressContainingIgnoreCase(query, query, query, pageable)
+                .map(this::mapToDto);
+    }
+
+    private TheatreDto mapToDto(Theatre theatre) {
+        TheatreDto dto = new TheatreDto();
+        dto.setId(theatre.getId());
+        dto.setName(theatre.getName());
+        dto.setCity(theatre.getCity());
+        dto.setAddress(theatre.getAddress());
+        dto.setAmenities(theatre.getAmenities());
+        return dto;
+    }
+}
