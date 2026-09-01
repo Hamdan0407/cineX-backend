@@ -34,7 +34,7 @@ public class ShowController {
                                         @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                         @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
         try {
-            adminAuthService.validateAdmin(roleHeader, emailHeader);
+            adminAuthService.validateAdmin();
             return new ResponseEntity<>(showService.addShow(showDto), HttpStatus.CREATED);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -47,7 +47,7 @@ public class ShowController {
                                         @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                         @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
         try {
-            adminAuthService.validateAdmin(roleHeader, emailHeader);
+            adminAuthService.validateAdmin();
             return ResponseEntity.ok(showService.updateShow(id, showDto));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -59,7 +59,7 @@ public class ShowController {
     public ResponseEntity<?> deleteShow(@PathVariable Long id,
                                         @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                         @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+        adminAuthService.validateAdmin();
         showService.deleteShow(id);
         return ResponseEntity.ok("Show deleted successfully");
     }

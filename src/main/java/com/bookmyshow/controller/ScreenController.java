@@ -29,7 +29,7 @@ public class ScreenController {
                                        @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                        @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
         try {
-            adminAuthService.validateAdmin(roleHeader, emailHeader);
+            adminAuthService.validateAdmin();
             return new ResponseEntity<>(screenService.addScreen(dto), HttpStatus.CREATED);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -42,7 +42,7 @@ public class ScreenController {
                                           @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                           @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
         try {
-            adminAuthService.validateAdmin(roleHeader, emailHeader);
+            adminAuthService.validateAdmin();
             return ResponseEntity.ok(screenService.updateScreen(id, dto));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -54,7 +54,7 @@ public class ScreenController {
     public ResponseEntity<?> deleteScreen(@PathVariable Long id,
                                           @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                           @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+        adminAuthService.validateAdmin();
         screenService.deleteScreen(id);
         return ResponseEntity.ok("Screen deleted successfully");
     }

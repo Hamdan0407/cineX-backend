@@ -28,11 +28,9 @@ public class SeatController {
 
     @Operation(summary = "Build custom seat layout with categories and pricing")
     @PostMapping("/layout/{screenId}")
-    public ResponseEntity<?> buildSeatLayout(@PathVariable Long screenId, @RequestBody SeatLayoutRequest request,
-                                             @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                             @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
+    public ResponseEntity<?> buildSeatLayout(@PathVariable Long screenId, @RequestBody SeatLayoutRequest request) {
         try {
-            adminAuthService.validateAdmin(roleHeader, emailHeader);
+            adminAuthService.validateAdmin();
             return new ResponseEntity<>(seatService.buildSeatLayout(screenId, request), HttpStatus.CREATED);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -41,11 +39,9 @@ public class SeatController {
 
     @Operation(summary = "@PostMapping operation for ResponseEntity<?>")
     @PostMapping("/screen/{screenId}")
-    public ResponseEntity<?> bulkCreateSeats(@PathVariable Long screenId,
-                                             @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                             @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
+    public ResponseEntity<?> bulkCreateSeats(@PathVariable Long screenId) {
         try {
-            adminAuthService.validateAdmin(roleHeader, emailHeader);
+            adminAuthService.validateAdmin();
             return new ResponseEntity<>(seatService.bulkCreateSeats(screenId), HttpStatus.CREATED);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -54,11 +50,9 @@ public class SeatController {
 
     @Operation(summary = "Update single seat")
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateSeat(@PathVariable Long id, @Valid @RequestBody SeatDto dto,
-                                        @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                        @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
+    public ResponseEntity<?> updateSeat(@PathVariable Long id, @Valid @RequestBody SeatDto dto) {
         try {
-            adminAuthService.validateAdmin(roleHeader, emailHeader);
+            adminAuthService.validateAdmin();
             return ResponseEntity.ok(seatService.updateSeat(id, dto));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -67,10 +61,8 @@ public class SeatController {
 
     @Operation(summary = "Delete single seat")
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteSeat(@PathVariable Long id,
-                                        @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                        @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+    public ResponseEntity<?> deleteSeat(@PathVariable Long id) {
+        adminAuthService.validateAdmin();
         seatService.deleteSeat(id);
         return ResponseEntity.ok("Seat deleted successfully");
     }

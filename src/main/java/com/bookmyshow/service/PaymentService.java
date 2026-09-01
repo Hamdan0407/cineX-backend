@@ -41,14 +41,14 @@ public class PaymentService {
 
     private String getEffectiveKeyId() {
         if (keyId == null || keyId.trim().isEmpty()) {
-            return "rzp_test_TAG6wbNf35AKL4";
+            throw new IllegalStateException("Razorpay key ID is not configured");
         }
         return keyId;
     }
 
     private String getEffectiveKeySecret() {
         if (keySecret == null || keySecret.trim().isEmpty()) {
-            return "44muwJ8rF923cVwbmfY06skP";
+            throw new IllegalStateException("Razorpay key secret is not configured");
         }
         return keySecret;
     }
@@ -88,10 +88,12 @@ public class PaymentService {
         }
 
         long amountInPaise = Math.round(bookingAmount * 100);
+        String effectiveKeyId = getEffectiveKeyId();
+        String effectiveKeySecret = getEffectiveKeySecret();
         String orderId;
 
         try {
-            RazorpayClient razorpayClient = new RazorpayClient(getEffectiveKeyId(), getEffectiveKeySecret());
+            RazorpayClient razorpayClient = new RazorpayClient(effectiveKeyId, effectiveKeySecret);
             JSONObject orderRequest = new JSONObject();
             orderRequest.put("amount", amountInPaise);
             orderRequest.put("currency", "INR");
@@ -128,7 +130,7 @@ public class PaymentService {
                 amountInPaise,
                 bookingAmount,
                 "INR",
-                getEffectiveKeyId(),
+                effectiveKeyId,
                 "CineX",
                 "Movie Ticket - " + (booking.getMovieTitle() != null ? booking.getMovieTitle() : "Cinema"),
                 booking.getMovieTitle(),

@@ -1,61 +1,8 @@
-2026-08-24 19:46:25.429 ERROR [main] [traceId=NONE userId=NONE] o.s.b.d.LoggingFailureAnalysisReporter   : 
-
-***************************
-APPLICATION FAILED TO START
-***************************
-
-Description:
-
-Parameter 0 of constructor in com.bookmyshow.service.EmailService required a bean of type 'org.springframework.mail.javamail.JavaMailSender' that could not be found.
-
-
-Action:
-
-Consider defining a bean of type 'org.springframework.mail.javamail.JavaMailSender' in your configuration.
-
-2026-08-24 19:46:40.697 ERROR [main] [traceId=NONE userId=NONE] o.s.b.d.LoggingFailureAnalysisReporter   : 
-
-***************************
-APPLICATION FAILED TO START
-***************************
-
-Description:
-
-Parameter 0 of constructor in com.bookmyshow.service.EmailService required a bean of type 'org.springframework.mail.javamail.JavaMailSender' that could not be found.
-
-
-Action:
-
-Consider defining a bean of type 'org.springframework.mail.javamail.JavaMailSender' in your configuration.
-
-2026-08-24 19:47:03.634 ERROR [main] [traceId=NONE userId=NONE] o.s.b.d.LoggingFailureAnalysisReporter   : 
-
-***************************
-APPLICATION FAILED TO START
-***************************
-
-Description:
-
-Parameter 0 of constructor in com.bookmyshow.service.EmailService required a bean of type 'org.springframework.mail.javamail.JavaMailSender' that could not be found.
-
-
-Action:
-
-Consider defining a bean of type 'org.springframework.mail.javamail.JavaMailSender' in your configuration.
-
-2026-08-24 19:47:10.589 ERROR [main] [traceId=NONE userId=NONE] o.s.b.d.LoggingFailureAnalysisReporter   : 
-
-***************************
-APPLICATION FAILED TO START
-***************************
-
-Description:
-
-Parameter 0 of constructor in com.bookmyshow.service.EmailService required a bean of type 'org.springframework.mail.javamail.JavaMailSender' that could not be found.
-
-
-Action:
-
-Consider defining a bean of type 'org.springframework.mail.javamail.JavaMailSender' in your configuration.
-
-2026-08-24 19:52:27.705 ERROR [main] [traceId=NONE userId=NONE] com.bookmyshow.service.PaymentService    : HMAC SHA256 signature verification failed for Order order_test_123456 and Payment pay_test_987654
+2026-09-01 18:00:52.843 ERROR [main] [traceId=NONE userId=NONE] com.bookmyshow.service.PaymentService    : HMAC SHA256 signature verification failed for Order order_test_123456 and Payment pay_test_987654
+2026-09-01 18:03:26.572 ERROR [main] [traceId=NONE userId=NONE] com.bookmyshow.service.PaymentService    : HMAC SHA256 signature verification failed for Order order_test_123456 and Payment pay_test_987654
+2026-09-01 18:43:21.137 ERROR [main] [traceId=NONE userId=NONE] com.bookmyshow.service.PaymentService    : HMAC SHA256 signature verification failed for Order order_test_123456 and Payment pay_test_987654
+2026-09-01 18:46:29.828 ERROR [main] [traceId=NONE userId=NONE] com.bookmyshow.service.PaymentService    : HMAC SHA256 signature verification failed for Order order_test_123456 and Payment pay_test_987654
+2026-09-01 18:48:27.028 ERROR [main] [traceId=NONE userId=NONE] com.bookmyshow.service.PaymentService    : HMAC SHA256 signature verification failed for Order order_test_123456 and Payment pay_test_987654
+2026-09-01 19:28:42.172 ERROR [main] [traceId=NONE userId=NONE] com.bookmyshow.service.PaymentService    : HMAC SHA256 signature verification failed for Order order_test_123456 and Payment pay_test_987654
+2026-09-01 19:32:16.251 ERROR [main] [traceId=NONE userId=NONE] com.bookmyshow.service.PaymentService    : HMAC SHA256 signature verification failed for Order order_test_123456 and Payment pay_test_987654
+2026-09-01 19:50:56.711 ERROR [main] [traceId=NONE userId=NONE] com.bookmyshow.service.PaymentService    : HMAC SHA256 signature verification failed for Order order_test_123456 and Payment pay_test_987654

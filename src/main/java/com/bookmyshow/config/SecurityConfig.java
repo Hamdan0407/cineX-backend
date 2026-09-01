@@ -12,6 +12,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -28,6 +29,9 @@ import java.util.List;
 public class SecurityConfig {
 
     private final ClerkJwtAuthenticationFilter clerkJwtAuthenticationFilter;
+
+    @Value("${clerk.issuer:}")
+    private String clerkIssuer;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -54,20 +58,25 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .headers(headers -> headers.frameOptions(frame -> frame.disable())) // Required for H2 console
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
+            .authorizeHttpRequests(auth -> {
                 // Public GET endpoints
-                .requestMatchers(HttpMethod.GET, "/api/movies/**", "/api/theatres/**", "/api/shows/**", "/api/tmdb/**").permitAll()
+                auth.requestMatchers(HttpMethod.GET, "/api/movies/**", "/api/theatres/**", "/api/shows/**", "/api/tmdb/**", "/api/seats/screen/**").permitAll();
                 // Public POST user registration/login
-                .requestMatchers(HttpMethod.POST, "/api/users/**").permitAll()
+                auth.requestMatchers(HttpMethod.POST, "/api/auth/**").permitAll();
                 // Documentation & Monitoring & WebSockets
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/actuator/**", "/h2-console/**", "/ws/**").permitAll()
+                auth.requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/actuator/**", "/h2-console/**", "/ws/**").permitAll();
+                // The no-token REST fallback is available only to the isolated test environment.
+                if ("https://test.clerk.dev".equals(clerkIssuer)) {
+                    auth.requestMatchers(HttpMethod.POST, "/api/shows/*/seats/lock").permitAll();
+                    auth.requestMatchers(HttpMethod.DELETE, "/api/shows/*/seats/lock").permitAll();
+                }
                 // Admin only endpoints
-                .requestMatchers("/api/admin/**", "/api/cache/**").hasRole("ADMIN")
+                auth.requestMatchers("/api/admin/**", "/api/cache/**").hasRole("ADMIN");
                 // Authenticated user endpoints
-                .requestMatchers("/api/bookings/**", "/api/payments/**", "/api/tickets/**").hasAnyRole("USER", "ADMIN")
+                auth.requestMatchers("/api/bookings/**", "/api/payments/**", "/api/tickets/**").hasAnyRole("USER", "ADMIN");
                 // All other requests must be authenticated
-                .anyRequest().permitAll() // Fallback to permitAll for local tests without headers if not explicitly matched above
-            )
+                auth.anyRequest().authenticated();
+            })
             .addFilterBefore(clerkJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
             
         return http.build();

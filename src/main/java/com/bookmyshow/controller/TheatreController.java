@@ -32,7 +32,7 @@ public class TheatreController {
     public ResponseEntity<TheatreDto> addTheatre(@Valid @RequestBody TheatreDto dto,
                                                  @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                                  @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+        adminAuthService.validateAdmin();
         return new ResponseEntity<>(theatreService.addTheatre(dto), HttpStatus.CREATED);
     }
 
@@ -41,7 +41,7 @@ public class TheatreController {
     public ResponseEntity<TheatreDto> updateTheatre(@PathVariable Long id, @Valid @RequestBody TheatreDto dto,
                                                     @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                                     @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+        adminAuthService.validateAdmin();
         return ResponseEntity.ok(theatreService.updateTheatre(id, dto));
     }
 
@@ -50,7 +50,7 @@ public class TheatreController {
     public ResponseEntity<?> deleteTheatre(@PathVariable Long id,
                                            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                            @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+        adminAuthService.validateAdmin();
         theatreService.deleteTheatre(id);
         return ResponseEntity.ok("Theatre deleted successfully");
     }

@@ -22,8 +22,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 @Transactional
 @TestPropertySource(properties = {
-        "razorpay.key-id=rzp_test_TAG6wbNf35AKL4",
-        "razorpay.key-secret=44muwJ8rF923cVwbmfY06skP"
+        "razorpay.key-id=test-key-id",
+        "razorpay.key-secret=test-secret-value"
 })
 public class RazorpayPaymentServiceTest {
 
@@ -61,7 +61,7 @@ public class RazorpayPaymentServiceTest {
     void testVerifyPayment_ValidSignature_Success() throws Exception {
         String orderId = "order_test_123456";
         String paymentId = "pay_test_987654";
-        String secret = "44muwJ8rF923cVwbmfY06skP";
+        String secret = "test-secret-value";
 
         // Compute valid HMAC SHA256 signature
         String payload = orderId + "|" + paymentId;
@@ -122,7 +122,7 @@ public class RazorpayPaymentServiceTest {
     void testDuplicateVerificationRequest_IdempotentBehavior() throws Exception {
         String orderId = "order_test_123456";
         String paymentId = "pay_test_987654";
-        String secret = "44muwJ8rF923cVwbmfY06skP";
+        String secret = "test-secret-value";
 
         String payload = orderId + "|" + paymentId;
         javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");

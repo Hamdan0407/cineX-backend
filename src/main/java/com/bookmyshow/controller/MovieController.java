@@ -31,7 +31,7 @@ public class MovieController {
     public ResponseEntity<MovieDto> addMovie(@Valid @RequestBody MovieDto dto,
                                              @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                              @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+        adminAuthService.validateAdmin();
         return new ResponseEntity<>(movieService.addMovie(dto), HttpStatus.CREATED);
     }
 
@@ -40,7 +40,7 @@ public class MovieController {
     public ResponseEntity<MovieDto> updateMovie(@PathVariable Long id, @Valid @RequestBody MovieDto dto,
                                                 @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                                 @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+        adminAuthService.validateAdmin();
         return ResponseEntity.ok(movieService.updateMovie(id, dto));
     }
 
@@ -49,7 +49,7 @@ public class MovieController {
     public ResponseEntity<?> deleteMovie(@PathVariable Long id,
                                          @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
                                          @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+        adminAuthService.validateAdmin();
         movieService.deleteMovie(id);
         return ResponseEntity.ok("Movie deleted successfully");
     }

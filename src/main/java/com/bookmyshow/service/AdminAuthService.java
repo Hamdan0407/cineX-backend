@@ -35,35 +35,22 @@ public class AdminAuthService {
     }
 
     /**
-     * Legacy/overloaded method for backward compatibility and test suites.
-     * Checks explicit role header or database role if SecurityContext is not populated.
+     * Backward-compatible service API for older callers that provide an explicit role/email pair.
+     * HTTP controllers must use validateAdmin(), which validates the authenticated security context.
      */
-    public void validateAdmin(String roleHeader, String emailOrId) {
-        // First check SecurityContext if present and authenticated
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !auth.getPrincipal().equals("anonymousUser")) {
-            if (auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
-                return;
-            }
-        }
-
-        // Fallback check for test environment or local development
-        if ("ADMIN".equalsIgnoreCase(roleHeader) || "admin@cinex.com".equalsIgnoreCase(emailOrId)) {
+    @Deprecated
+    public void validateAdmin(String role, String email) {
+        if ("ADMIN".equalsIgnoreCase(role)) {
             return;
         }
 
-        if (emailOrId != null && !emailOrId.trim().isEmpty()) {
-            Optional<User> userOpt = userRepository.findByEmail(emailOrId);
-            if (userOpt.isEmpty()) {
-                userOpt = userRepository.findByClerkUserId(emailOrId);
-            }
-            if (userOpt.isPresent() && "ADMIN".equalsIgnoreCase(userOpt.get().getRole())) {
-                return;
-            }
+        if (email != null && userRepository.findByEmail(email)
+                .map(user -> "ADMIN".equalsIgnoreCase(user.getRole()))
+                .orElse(false)) {
+            return;
         }
 
-        log.warn("Unauthorized attempt to access Admin API by identifier: {}", emailOrId);
-        throw new SecurityException("Access Denied: Admin role required to perform this operation.");
+        throw new SecurityException("Access Denied: Admin privileges required to perform this operation.");
     }
 
     /**
@@ -80,6 +67,8 @@ public class AdminAuthService {
                 log.warn("Ownership check failed: user {} attempted to access resource owned by {}", currentUserId, targetClerkUserId);
                 throw new SecurityException("Access Denied: You do not have permission for this resource.");
             }
+        } else {
+            throw new SecurityException("Not authenticated");
         }
     }
 

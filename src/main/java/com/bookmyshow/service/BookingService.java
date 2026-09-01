@@ -61,9 +61,11 @@ public class BookingService {
     @Transactional
     @CacheEvict(value = "shows", allEntries = true)
     public BookingResponse createBooking(BookingRequest request) {
-        if ((request.getSeatIds() == null || request.getSeatIds().isEmpty()) && 
-            (request.getSeatNames() == null || request.getSeatNames().isEmpty())) {
-            throw new ValidationException("No seats selected");
+        if (request.getShowId() == null) {
+            throw new ValidationException("showId is required");
+        }
+        if (request.getSeatIds() == null || request.getSeatIds().isEmpty()) {
+            throw new ValidationException("At least one seatId is required");
         }
 
         User user = null;
@@ -72,36 +74,34 @@ public class BookingService {
                     .orElseThrow(() -> new ResourceNotFoundException("User not found: " + request.getUserId()));
         }
 
-        Show show = null;
-        if (request.getShowId() != null && request.getShowId() > 0) {
-            show = showRepository.findById(request.getShowId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Show not found: " + request.getShowId()));
-        }
+        Show show = showRepository.findById(request.getShowId())
+                .orElseThrow(() -> new ResourceNotFoundException("Show not found: " + request.getShowId()));
 
         List<Seat> seatsToBook = new ArrayList<>();
         Double totalAmount = request.getAmount() != null ? request.getAmount() : 0.0;
 
-        if (request.getSeatIds() != null && !request.getSeatIds().isEmpty() && show != null) {
-            // Sort seat IDs in ascending order to prevent database deadlocks when concurrent transactions lock overlapping seat sets.
-            List<Long> sortedSeatIds = request.getSeatIds().stream()
-                    .sorted()
-                    .distinct()
-                    .collect(Collectors.toList());
+        // Sort IDs before acquiring pessimistic locks to prevent transaction deadlocks.
+        List<Long> sortedSeatIds = request.getSeatIds().stream()
+                .sorted()
+                .distinct()
+                .collect(Collectors.toList());
 
-            for (Long seatId : sortedSeatIds) {
-                // 1. Acquire pessimistic write lock on the physical seat row BEFORE checking availability
-                Seat seat = seatRepository.findByIdWithLock(seatId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Seat not found: " + seatId));
+        for (Long seatId : sortedSeatIds) {
+            Seat seat = seatRepository.findByIdWithLock(seatId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Seat not found: " + seatId));
 
-                // 2. Safely check if the seat is already booked or pending for this show
-                if (bookingSeatRepository.isSeatBooked(seatId, show.getId())) {
-                    throw new SeatAlreadyBookedException("Seat already booked");
-                }
-                seatsToBook.add(seat);
+            if (seat.getScreen() == null || show.getScreen() == null
+                    || !seat.getScreen().getId().equals(show.getScreen().getId())) {
+                throw new ValidationException("Seat " + seatId + " does not belong to the screen for show " + show.getId());
             }
-            if (request.getAmount() == null) {
-                totalAmount = seatsToBook.size() * show.getPrice();
+
+            if (bookingSeatRepository.isSeatBooked(seatId, show.getId())) {
+                throw new SeatAlreadyBookedException("Seat already booked for show " + show.getId());
             }
+            seatsToBook.add(seat);
+        }
+        if (request.getAmount() == null) {
+            totalAmount = seatsToBook.size() * show.getPrice();
         }
 
         Booking booking = new Booking();
@@ -111,12 +111,7 @@ public class BookingService {
         booking.setMovieId(request.getMovieId() != null ? request.getMovieId() : (show != null && show.getMovie() != null ? show.getMovie().getId() : null));
         booking.setTheatreId(request.getTheatreId() != null ? request.getTheatreId() : (show != null && show.getScreen() != null && show.getScreen().getTheatre() != null ? show.getScreen().getTheatre().getId() : null));
         
-        String seatsStr = "";
-        if (request.getSeatNames() != null && !request.getSeatNames().isEmpty()) {
-            seatsStr = String.join(",", request.getSeatNames());
-        } else if (!seatsToBook.isEmpty()) {
-            seatsStr = seatsToBook.stream().map(Seat::getSeatNumber).collect(Collectors.joining(","));
-        }
+        String seatsStr = seatsToBook.stream().map(Seat::getSeatNumber).collect(Collectors.joining(","));
         booking.setSeatIds(seatsStr);
         booking.setAmount(totalAmount);
         booking.setTotalAmount(totalAmount);

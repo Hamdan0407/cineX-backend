@@ -1,6 +1,8 @@
 package com.bookmyshow.dto;
 
 import lombok.Data;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 @Data
@@ -9,12 +11,13 @@ public class BookingRequest {
     private String clerkUserId;
     private String userEmail;   // Optional customer email
     
-    private Long showId;        // Optional when booking dynamic TMDB movie shows
+    @NotNull(message = "showId is required")
+    private Long showId;
     private Long movieId;
     private Long theatreId;
     
-    private List<Long> seatIds; // Optional when using seatNames
-    private List<String> seatNames; // e.g., ["A1", "A2"]
+    @NotEmpty(message = "At least one seatId is required")
+    private List<@NotNull(message = "seatId cannot be null") Long> seatIds;
     
     private Double amount;
     

@@ -45,18 +45,15 @@ public class BookingController {
 
     @Operation(summary = "Get all bookings (Admin only)")
     @GetMapping
-    public ResponseEntity<List<BookingResponse>> getAllBookings(@RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                                                @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+    public ResponseEntity<List<BookingResponse>> getAllBookings() {
+        adminAuthService.validateAdmin();
         return ResponseEntity.ok(bookingService.getAllBookings());
     }
 
     @Operation(summary = "Search bookings (Admin only)")
     @GetMapping("/search")
-    public ResponseEntity<List<BookingResponse>> searchBookings(@RequestParam(required = false) String query,
-                                                                @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                                                @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+    public ResponseEntity<List<BookingResponse>> searchBookings(@RequestParam(required = false) String query) {
+        adminAuthService.validateAdmin();
         return ResponseEntity.ok(bookingService.searchBookings(query));
     }
 
@@ -66,10 +63,8 @@ public class BookingController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "id") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDir,
-            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-            @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+            @RequestParam(defaultValue = "desc") String sortDir) {
+        adminAuthService.validateAdmin();
         return ResponseEntity.ok(bookingService.getBookingsPaginated(page, size, sortBy, sortDir));
     }
 
@@ -80,10 +75,8 @@ public class BookingController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "id") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDir,
-            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-            @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+            @RequestParam(defaultValue = "desc") String sortDir) {
+        adminAuthService.validateAdmin();
         return ResponseEntity.ok(bookingService.searchBookingsPaginated(query, page, size, sortBy, sortDir));
     }
 
@@ -91,11 +84,9 @@ public class BookingController {
     @PutMapping("/{bookingId}/status")
     public ResponseEntity<?> updateBookingStatus(@PathVariable Long bookingId,
                                                  @RequestParam(required = false) String bookingStatus,
-                                                 @RequestParam(required = false) String paymentStatus,
-                                                 @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                                 @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
+                                                 @RequestParam(required = false) String paymentStatus) {
         try {
-            adminAuthService.validateAdmin(roleHeader, emailHeader);
+            adminAuthService.validateAdmin();
             return ResponseEntity.ok(bookingService.updateBookingStatus(bookingId, bookingStatus, paymentStatus));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());

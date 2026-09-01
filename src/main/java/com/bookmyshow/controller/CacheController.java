@@ -23,30 +23,23 @@ public class CacheController {
 
     @Operation(summary = "Get real-time cache statistics and architectural explanations")
     @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getCacheStats(
-            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-            @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+    public ResponseEntity<Map<String, Object>> getCacheStats() {
+        adminAuthService.validateAdmin();
         return ResponseEntity.ok(cacheService.getCacheStatistics());
     }
 
     @Operation(summary = "Evict all cache entries across the platform")
     @DeleteMapping("/evict-all")
-    public ResponseEntity<String> evictAllCaches(
-            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-            @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+    public ResponseEntity<String> evictAllCaches() {
+        adminAuthService.validateAdmin();
         cacheService.evictAllCaches();
         return ResponseEntity.ok("All caches evicted successfully");
     }
 
     @Operation(summary = "Evict entries for a specific cache")
     @DeleteMapping("/evict/{cacheName}")
-    public ResponseEntity<String> evictCache(
-            @PathVariable String cacheName,
-            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-            @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+    public ResponseEntity<String> evictCache(@PathVariable String cacheName) {
+        adminAuthService.validateAdmin();
         cacheService.evictCache(cacheName);
         return ResponseEntity.ok("Cache '" + cacheName + "' evicted successfully");
     }

@@ -20,9 +20,8 @@ public class AdminDashboardController {
 
     @Operation(summary = "Get admin dashboard KPI metrics and chart data")
     @GetMapping
-    public ResponseEntity<AdminDashboardDto> getDashboardStats(@RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                                               @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        adminAuthService.validateAdmin(roleHeader, emailHeader);
+    public ResponseEntity<AdminDashboardDto> getDashboardStats() {
+        adminAuthService.validateAdmin();
         return ResponseEntity.ok(adminDashboardService.getDashboardStats());
     }
 }
