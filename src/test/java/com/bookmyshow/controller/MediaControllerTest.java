@@ -22,7 +22,7 @@ class MediaControllerTest {
     static final String SPIDER_MAN_TRAILER_OBJECT_KEY =
             "trailers/SPIDER-MAN_ BRAND NEW DAY \u2013 New Trailer (4K).mp4";
     static final String SPIDER_MAN_TRAILER_PLAYBACK_URL =
-            "https://d1al8zqo1izqiu.cloudfront.net/trailers/SPIDER-MAN_%20BRAND%20NEW%20DAY%20%E2%80%93%20New%20Trailer%20%284K%29.mp4";
+            "https://d1al8zqo1izqiu.cloudfront.net/trailers/SPIDER-MAN_%20BRAND%20NEW%20DAY%20%E2%80%93%20New%20Trailer%20(4K).mp4";
 
     @Autowired
     private MockMvc mockMvc;

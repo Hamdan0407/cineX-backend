@@ -62,9 +62,18 @@ public class MediaDeliveryService {
             if (i > 0) {
                 builder.append('/');
             }
-            builder.append(URLEncoder.encode(segments[i], StandardCharsets.UTF_8).replace("+", "%20"));
+            builder.append(encodeObjectKeySegment(segments[i]));
         }
         return builder.toString();
+    }
+
+    private static String encodeObjectKeySegment(String segment) {
+        // CloudFront serves the uploaded key with literal parentheses; preserve them
+        // while still escaping spaces and Unicode characters in the URL path.
+        return URLEncoder.encode(segment, StandardCharsets.UTF_8)
+                .replace("+", "%20")
+                .replace("%28", "(")
+                .replace("%29", ")");
     }
 
     static String normalizeObjectKey(String objectKey) {

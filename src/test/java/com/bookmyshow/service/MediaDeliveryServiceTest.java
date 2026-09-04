@@ -36,7 +36,7 @@ class MediaDeliveryServiceTest {
     @Test
     void encodesSpacesParenthesesAndEnDashInObjectKeySegments() {
         assertEquals(
-                "trailers/SPIDER-MAN_%20BRAND%20NEW%20DAY%20%E2%80%93%20New%20Trailer%20%284K%29.mp4",
+                "trailers/SPIDER-MAN_%20BRAND%20NEW%20DAY%20%E2%80%93%20New%20Trailer%20(4K).mp4",
                 MediaDeliveryService.encodeObjectKeyForUrl(SPIDER_MAN_TRAILER_OBJECT_KEY));
     }
 
