@@ -18,6 +18,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -34,6 +35,15 @@ import java.util.Map;
 @Configuration
 @EnableCaching
 public class CacheConfig {
+
+    private final RedisConnectionProperties redisProperties;
+
+    @Value("${cinex.redis.required:false}")
+    private boolean redisRequired;
+
+    public CacheConfig(RedisConnectionProperties redisProperties) {
+        this.redisProperties = redisProperties;
+    }
 
     @Bean
     public CacheManager cacheManager(ObjectProvider<RedisConnectionFactory> connectionFactoryProvider) {
@@ -83,7 +93,12 @@ public class CacheConfig {
                 return new StatsTrackingCacheManager(redisCacheManager, "REDIS");
 
             } catch (Exception ex) {
-                log.warn("Redis server unreachable ({}). Falling back to embedded ConcurrentMapCacheManager.", ex.getMessage());
+                log.error("Redis is unreachable at {}: {}", redisProperties.safeEndpoint(), ex.getMessage());
+                if (redisRequired) {
+                    throw new IllegalStateException("Redis is required for this deployment but is unreachable at "
+                            + redisProperties.safeEndpoint(), ex);
+                }
+                log.warn("Using embedded ConcurrentMapCacheManager because Redis is optional for this local deployment.");
             }
         } else {
             log.info("RedisConnectionFactory not available. Using embedded ConcurrentMapCacheManager.");
