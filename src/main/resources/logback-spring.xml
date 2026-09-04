@@ -9,7 +9,7 @@
 
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <!-- Console Appender (STDOUT/STDERR for Render, Cloud & Container Environments) -->
+    <!-- Console Appender (STDOUT for Render, Cloud & Container Environments) -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>${CONSOLE_LOG_PATTERN}</pattern>
@@ -17,7 +17,29 @@
         </encoder>
     </appender>
 
-    <!-- File Appenders (Only enabled for local/dev profiles) -->
+    <!-- Spring & Hibernate Loggers (level only, so profile independent) -->
+    <logger name="org.springframework.web" level="INFO"/>
+    <logger name="org.hibernate.SQL" level="WARN"/>
+    <logger name="org.hibernate.orm.deprecation" level="ERROR"/>
+
+    <!--
+      Appender wiring is split into two mutually exclusive profile blocks. <springProfile> is only
+      valid as a direct child of <configuration>: Spring Boot's sanity checker rejects it inside
+      <appender>, <logger> or <root>, so the loggers are declared once per block instead.
+    -->
+
+    <!-- Any profile other than local/dev (prod, default, test): console only. -->
+    <springProfile name="!local &amp; !dev">
+        <logger name="com.bookmyshow" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- Local and dev only: console plus rolling files on a writable working directory. -->
     <springProfile name="local,dev">
         <!-- General Application Rolling File Appender -->
         <appender name="FILE_APPENDER" class="ch.qos.logback.core.rolling.RollingFileAppender">
@@ -54,28 +76,17 @@
                 <totalSizeCap>100MB</totalSizeCap>
             </rollingPolicy>
         </appender>
+
+        <logger name="com.bookmyshow" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE_APPENDER"/>
+            <appender-ref ref="ERROR_FILE_APPENDER"/>
+        </logger>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE_APPENDER"/>
+            <appender-ref ref="ERROR_FILE_APPENDER"/>
+        </root>
     </springProfile>
-
-    <!-- Application Specific Loggers -->
-    <logger name="com.bookmyshow" level="INFO" additivity="false">
-        <appender-ref ref="CONSOLE"/>
-        <springProfile name="local,dev">
-            <appender-ref ref="FILE_APPENDER"/>
-            <appender-ref ref="ERROR_FILE_APPENDER"/>
-        </springProfile>
-    </logger>
-
-    <!-- Spring & Hibernate Loggers -->
-    <logger name="org.springframework.web" level="INFO"/>
-    <logger name="org.hibernate.SQL" level="WARN"/>
-    <logger name="org.hibernate.orm.deprecation" level="ERROR"/>
-
-    <!-- Root Logger -->
-    <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <springProfile name="local,dev">
-            <appender-ref ref="FILE_APPENDER"/>
-            <appender-ref ref="ERROR_FILE_APPENDER"/>
-        </springProfile>
-    </root>
 </configuration>
