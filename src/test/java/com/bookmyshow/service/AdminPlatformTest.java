@@ -75,7 +75,7 @@ public class AdminPlatformTest {
 
     @Test
     void testMovieCrudOperations() {
-        MovieDto newMovie = new MovieDto();
+        MovieRequest newMovie = new MovieRequest();
         newMovie.setTitle("Inception Admin Test");
         newMovie.setDescription("Dream within a dream");
         newMovie.setDuration(148);
@@ -88,16 +88,27 @@ public class AdminPlatformTest {
         newMovie.setCertification("UA");
         newMovie.setStatus("RELEASED");
 
-        MovieDto created = movieService.addMovie(newMovie);
+        MovieResponse created = movieService.addMovie(newMovie);
         assertNotNull(created.getId());
         assertEquals("Inception Admin Test", created.getTitle());
         assertEquals("UA", created.getCertification());
 
-        created.setStatus("ARCHIVED");
-        MovieDto updated = movieService.updateMovie(created.getId(), created);
+        MovieRequest updateRequest = new MovieRequest();
+        updateRequest.setTitle(created.getTitle());
+        updateRequest.setDescription(created.getDescription());
+        updateRequest.setDuration(created.getDuration());
+        updateRequest.setLanguage(created.getLanguage());
+        updateRequest.setGenre(created.getGenre());
+        updateRequest.setReleaseDate(created.getReleaseDate());
+        updateRequest.setPosterPath(created.getPosterPath());
+        updateRequest.setTrailerUrl(created.getTrailerUrl());
+        updateRequest.setCast(created.getCast());
+        updateRequest.setCertification(created.getCertification());
+        updateRequest.setStatus("ARCHIVED");
+        MovieResponse updated = movieService.updateMovie(created.getId(), updateRequest);
         assertEquals("ARCHIVED", updated.getStatus());
 
-        List<MovieDto> searchResults = movieService.searchMoviesByTitle("Inception");
+        List<MovieResponse> searchResults = movieService.searchMoviesByTitle("Inception");
         assertFalse(searchResults.isEmpty());
 
         movieService.deleteMovie(created.getId());
@@ -106,25 +117,25 @@ public class AdminPlatformTest {
 
     @Test
     void testTheatreAndScreenCrudWithSeatLayout() {
-        TheatreDto theatreDto = new TheatreDto();
-        theatreDto.setName("PVR Admin Test");
-        theatreDto.setCity("Mumbai");
-        theatreDto.setAddress("Lower Parel");
-        theatreDto.setAmenities("Dolby Atmos, Recliner, Parking");
+        TheatreRequest theatreRequest = new TheatreRequest();
+        theatreRequest.setName("PVR Admin Test");
+        theatreRequest.setCity("Mumbai");
+        theatreRequest.setAddress("Lower Parel");
+        theatreRequest.setAmenities("Dolby Atmos, Recliner, Parking");
 
-        TheatreDto savedTheatre = theatreService.addTheatre(theatreDto);
+        TheatreResponse savedTheatre = theatreService.addTheatre(theatreRequest);
         assertNotNull(savedTheatre.getId());
         assertEquals("Dolby Atmos, Recliner, Parking", savedTheatre.getAmenities());
 
-        ScreenDto screenDto = new ScreenDto();
-        screenDto.setScreenName("Audi 1 IMAX");
-        screenDto.setTotalSeats(100);
-        screenDto.setTheatreId(savedTheatre.getId());
-        screenDto.setTotalRows(10);
-        screenDto.setTotalColumns(10);
-        screenDto.setSeatCategories("VIP,Executive,Premium,Recliner,Gold,Silver");
+        ScreenRequest screenRequest = new ScreenRequest();
+        screenRequest.setScreenName("Audi 1 IMAX");
+        screenRequest.setTotalSeats(100);
+        screenRequest.setTheatreId(savedTheatre.getId());
+        screenRequest.setTotalRows(10);
+        screenRequest.setTotalColumns(10);
+        screenRequest.setSeatCategories("VIP,Executive,Premium,Recliner,Gold,Silver");
 
-        ScreenDto savedScreen = screenService.addScreen(screenDto);
+        ScreenResponse savedScreen = screenService.addScreen(screenRequest);
         assertNotNull(savedScreen.getId());
 
         SeatLayoutRequest layoutReq = new SeatLayoutRequest();
@@ -143,15 +154,15 @@ public class AdminPlatformTest {
         rowCats.put("C", "Executive");
         layoutReq.setRowCategories(rowCats);
 
-        List<SeatDto> seats = seatService.buildSeatLayout(savedScreen.getId(), layoutReq);
+        List<SeatResponse> seats = seatService.buildSeatLayout(savedScreen.getId(), layoutReq);
         assertEquals(50, seats.size());
 
-        SeatDto rowA1 = seats.stream().filter(s -> "A1".equals(s.getSeatNumber())).findFirst().orElse(null);
+        SeatResponse rowA1 = seats.stream().filter(s -> "A1".equals(s.getSeatNumber())).findFirst().orElse(null);
         assertNotNull(rowA1);
         assertEquals("Recliner", rowA1.getSeatType());
         assertEquals(600.0, rowA1.getPrice());
 
-        SeatDto rowB1 = seats.stream().filter(s -> "B1".equals(s.getSeatNumber())).findFirst().orElse(null);
+        SeatResponse rowB1 = seats.stream().filter(s -> "B1".equals(s.getSeatNumber())).findFirst().orElse(null);
         assertNotNull(rowB1);
         assertEquals("VIP", rowB1.getSeatType());
         assertEquals(500.0, rowB1.getPrice());

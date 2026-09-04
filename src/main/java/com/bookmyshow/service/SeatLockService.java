@@ -1,191 +1,252 @@
 package com.bookmyshow.service;
 
 import com.bookmyshow.dto.SeatStatusUpdateDto;
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import com.bookmyshow.exception.SeatLockUnavailableException;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
-/**
- * Service managing in-memory seat locks (holds) and real-time STOMP WebSocket broadcasting.
- * Prevents duplicate seat selections during checkout and gracefully cleans up holds on disconnect.
- */
+/** Coordinates temporary seat holds across all backend instances. */
 @Slf4j
 @Service
 public class SeatLockService {
+    private static final String LOCK_PREFIX = "cinex:seat-lock:show:";
+    private static final String SESSION_PREFIX = "cinex:seat-lock:session:";
 
-    private static final long HOLD_TTL_MS = 10 * 60 * 1000L; // 10 minutes hold duration
+    private static final DefaultRedisScript<Long> ACQUIRE_LOCKS = new DefaultRedisScript<>("""
+            for i, key in ipairs(KEYS) do
+              local current = redis.call('GET', key)
+              if current and string.sub(current, 1, string.len(ARGV[1])) ~= ARGV[1] then return 0 end
+            end
+            for i, key in ipairs(KEYS) do
+              redis.call('SET', key, ARGV[2], 'PX', ARGV[3])
+              redis.call('SADD', ARGV[4], key)
+            end
+            redis.call('PEXPIRE', ARGV[4], ARGV[3])
+            return 1
+            """, Long.class);
 
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate;
+    private static final DefaultRedisScript<Long> RELEASE_LOCKS = new DefaultRedisScript<>("""
+            local released = 0
+            for i, key in ipairs(KEYS) do
+              local current = redis.call('GET', key)
+              if current then
+                local matches = ARGV[1] == '*' or current == ARGV[1] or string.sub(current, 1, string.len(ARGV[1])) == ARGV[1]
+                if string.sub(ARGV[1], 1, 8) == 'SESSION:' then
+                  matches = string.sub(current, -string.len(ARGV[1]) + 8) == string.sub(ARGV[1], 9)
+                end
+                if matches then
+                  redis.call('DEL', key)
+                  released = released + 1
+                end
+              end
+              if ARGV[2] ~= '' then redis.call('SREM', ARGV[2], key) end
+            end
+            if ARGV[2] ~= '' and redis.call('SCARD', ARGV[2]) == 0 then redis.call('DEL', ARGV[2]) end
+            return released
+            """, Long.class);
 
-    // Key format: "show:{showId}:seat:{seatId}" -> SeatHoldInfo
-    private final Map<String, SeatHoldInfo> activeHolds = new ConcurrentHashMap<>();
-    
-    // Mapping: sessionId -> Set of hold keys
-    private final Map<String, Set<String>> sessionHolds = new ConcurrentHashMap<>();
+    private final SimpMessagingTemplate messagingTemplate;
+    private final StringRedisTemplate redisTemplate;
 
-    /**
-     * Attempts to hold/select seats for a user. Rejects if any seat is already held by someone else.
-     */
-    public synchronized boolean holdSeats(Long showId, List<Long> seatIds, String userId, String sessionId) {
-        long now = System.currentTimeMillis();
+    // H2 tests select memory explicitly; all runtime profiles default to Redis.
+    @Value("${cinex.seat-lock.backend:redis}")
+    private String backend = "redis";
 
-        // Check if any seat is currently held by a different user
-        for (Long seatId : seatIds) {
-            String key = buildKey(showId, seatId);
-            SeatHoldInfo info = activeHolds.get(key);
-            if (info != null && info.getExpiresAt() > now && !info.getUserId().equals(userId)) {
-                log.warn("Seat selection rejected: Seat {} on show {} is already held by user {}", seatId, showId, info.getUserId());
-                return false;
-            }
-        }
+    @Value("${cinex.seat-lock.hold-ttl:10m}")
+    private Duration holdTtl = Duration.ofMinutes(10);
 
-        // Lock seats for this user
-        for (Long seatId : seatIds) {
-            String key = buildKey(showId, seatId);
-            SeatHoldInfo holdInfo = new SeatHoldInfo(showId, seatId, userId, sessionId, now + HOLD_TTL_MS);
-            activeHolds.put(key, holdInfo);
+    private final Map<String, String> testHolds = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> testSessionHolds = new ConcurrentHashMap<>();
 
-            if (sessionId != null) {
-                sessionHolds.computeIfAbsent(sessionId, k -> ConcurrentHashMap.newKeySet()).add(key);
-            }
-        }
-
-        log.info("User [{}] (session: [{}]) held seats {} for show {}", userId, sessionId, seatIds, showId);
-        broadcastUpdate(showId, seatIds, "HELD", userId);
-        return true;
+    public SeatLockService(SimpMessagingTemplate messagingTemplate, StringRedisTemplate redisTemplate) {
+        this.messagingTemplate = messagingTemplate;
+        this.redisTemplate = redisTemplate;
     }
 
-    /**
-     * Releases seat holds initiated by a user or session.
-     */
-    public synchronized void releaseSeats(Long showId, List<Long> seatIds, String userId, String sessionId) {
-        for (Long seatId : seatIds) {
-            String key = buildKey(showId, seatId);
-            SeatHoldInfo info = activeHolds.get(key);
-            if (info != null && (userId == null || info.getUserId().equals(userId) || (sessionId != null && sessionId.equals(info.getSessionId())))) {
-                activeHolds.remove(key);
-                if (info.getSessionId() != null && sessionHolds.containsKey(info.getSessionId())) {
-                    sessionHolds.get(info.getSessionId()).remove(key);
-                }
-            }
+    public boolean holdSeats(Long showId, List<Long> seatIds, String userId, String sessionId) {
+        validateRequest(showId, seatIds, userId);
+        List<Long> seats = normalizedSeatIds(seatIds);
+        String prefix = ownerPrefix(userId);
+        String token = prefix + encode(sessionId == null ? "REST_CLIENT" : sessionId);
+        boolean locked;
+        try {
+            locked = usesInMemoryStore()
+                    ? acquireInMemory(showId, seats, prefix, token, sessionId)
+                    : acquireRedis(showId, seats, prefix, token, sessionId);
+        } catch (org.springframework.data.redis.RedisConnectionFailureException ex) {
+            log.warn("Seat lock unavailable for show {} seats {}: {}", showId, seats, describeRedisFailure(ex));
+            throw new SeatLockUnavailableException("Seat locking is temporarily unavailable. Please try again shortly.", ex);
         }
-        log.info("Released seats {} for show {}", seatIds, showId);
-        broadcastUpdate(showId, seatIds, "AVAILABLE", userId != null ? userId : "SYSTEM");
+        log.info("Seat lock request show={} seats={} ownerPresent=true result={}", showId, seats, locked);
+        if (locked) broadcastUpdate(showId, seats, "HELD", userId);
+        return locked;
     }
 
-    /**
-     * Called when a booking is confirmed/completed to permanently mark seats as BOOKED and release holds.
-     */
-    public synchronized void broadcastSeatBooked(Long showId, List<Long> seatIds, String userId) {
-        for (Long seatId : seatIds) {
-            String key = buildKey(showId, seatId);
-            SeatHoldInfo info = activeHolds.remove(key);
-            if (info != null && info.getSessionId() != null && sessionHolds.containsKey(info.getSessionId())) {
-                sessionHolds.get(info.getSessionId()).remove(key);
-            }
-        }
-        log.info("Broadcasting BOOKED status for seats {} on show {}", seatIds, showId);
-        broadcastUpdate(showId, seatIds, "BOOKED", userId);
+    public void releaseSeats(Long showId, List<Long> seatIds, String userId, String sessionId) {
+        if (showId == null || seatIds == null || seatIds.isEmpty()) return;
+        List<Long> seats = normalizedSeatIds(seatIds);
+        String owner = userId == null ? "*" : ownerPrefix(userId);
+        long released = usesInMemoryStore()
+                ? releaseInMemory(showId, seats, owner, sessionId)
+                : releaseRedis(showId, seats, owner, sessionId == null ? "" : sessionKey(sessionId));
+        if (released > 0) broadcastUpdate(showId, seats, "AVAILABLE", userId == null ? "SYSTEM" : userId);
     }
 
-    /**
-     * Handles WebSocket session disconnections by releasing any seats held by the disconnecting session.
-     */
-    public synchronized void handleSessionDisconnect(String sessionId) {
-        Set<String> keys = sessionHolds.remove(sessionId);
-        if (keys == null || keys.isEmpty()) {
-            return;
-        }
+    public void broadcastSeatBooked(Long showId, List<Long> seatIds, String userId) {
+        if (showId == null || seatIds == null || seatIds.isEmpty()) return;
+        List<Long> seats = normalizedSeatIds(seatIds);
+        if (usesInMemoryStore()) releaseInMemory(showId, seats, "*", null);
+        else releaseRedis(showId, seats, "*", "");
+        broadcastUpdate(showId, seats, "BOOKED", userId);
+    }
 
-        log.info("Session [{}] disconnected. Cleaning up {} held seats.", sessionId, keys.size());
-        Map<Long, List<Long>> showToSeatsMap = new HashMap<>();
-
-        for (String key : keys) {
-            SeatHoldInfo info = activeHolds.remove(key);
-            if (info != null) {
-                showToSeatsMap.computeIfAbsent(info.getShowId(), k -> new ArrayList<>()).add(info.getSeatId());
-            }
-        }
-
-        showToSeatsMap.forEach((showId, seatIds) -> {
-            broadcastUpdate(showId, seatIds, "AVAILABLE", "DISCONNECTED");
+    public void handleSessionDisconnect(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return;
+        if (usesInMemoryStore()) { releaseInMemorySession(sessionId); return; }
+        Set<String> keys = redisTemplate.opsForSet().members(sessionKey(sessionId));
+        if (keys == null || keys.isEmpty()) return;
+        groupKeysByShow(keys).forEach((showId, seats) -> {
+            releaseRedis(showId, seats, "SESSION:" + encode(sessionId), sessionKey(sessionId));
+            broadcastUpdate(showId, seats, "AVAILABLE", "DISCONNECTED");
         });
     }
 
-    /**
-     * Returns all currently active held seat IDs for a given show.
-     */
-    public synchronized List<Long> getHeldSeatIds(Long showId) {
-        long now = System.currentTimeMillis();
-        return activeHolds.values().stream()
-                .filter(info -> info.getShowId().equals(showId) && info.getExpiresAt() > now)
-                .map(SeatHoldInfo::getSeatId)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Scheduled background task to clean up expired seat holds every 30 seconds.
-     */
-    @Scheduled(fixedDelay = 30000)
-    public synchronized void cleanupExpiredHolds() {
-        long now = System.currentTimeMillis();
-        Map<Long, List<Long>> expiredByShow = new HashMap<>();
-
-        Iterator<Map.Entry<String, SeatHoldInfo>> iterator = activeHolds.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, SeatHoldInfo> entry = iterator.next();
-            SeatHoldInfo info = entry.getValue();
-            if (info.getExpiresAt() <= now) {
-                iterator.remove();
-                if (info.getSessionId() != null && sessionHolds.containsKey(info.getSessionId())) {
-                    sessionHolds.get(info.getSessionId()).remove(entry.getKey());
-                }
-                expiredByShow.computeIfAbsent(info.getShowId(), k -> new ArrayList<>()).add(info.getSeatId());
-            }
-        }
-
-        if (!expiredByShow.isEmpty()) {
-            log.info("Cleaned up expired seat holds: {}", expiredByShow);
-            expiredByShow.forEach((showId, seatIds) -> broadcastUpdate(showId, seatIds, "AVAILABLE", "EXPIRED"));
-        }
-    }
-
-    private void broadcastUpdate(Long showId, List<Long> seatIds, String status, String userId) {
-        String destination = "/topic/shows/" + showId + "/seats";
-        SeatStatusUpdateDto updateDto = SeatStatusUpdateDto.builder()
-                .showId(showId)
-                .seatIds(seatIds)
-                .status(status)
-                .userId(userId)
-                .timestamp(System.currentTimeMillis())
-                .build();
+    public List<Long> getHeldSeatIds(Long showId) {
+        if (showId == null) return List.of();
+        Set<String> keys;
         try {
-            messagingTemplate.convertAndSend(destination, updateDto);
-        } catch (Exception e) {
-            log.warn("Failed to send STOMP broadcast to destination {}: {}", destination, e.getMessage());
+            keys = usesInMemoryStore() ? testHolds.keySet() : redisTemplate.keys(lockPrefix(showId) + "*");
+        } catch (org.springframework.data.redis.RedisConnectionFailureException ex) {
+            log.warn("Held-seat lookup unavailable for show {}: {}", showId, describeRedisFailure(ex));
+            throw new SeatLockUnavailableException("Seat availability is temporarily unavailable. Please try again shortly.", ex);
         }
+        if (keys == null) return List.of();
+        return keys.stream().filter(key -> key.startsWith(lockPrefix(showId)))
+                .filter(key -> usesInMemoryStore() || Boolean.TRUE.equals(redisTemplate.hasKey(key)))
+                .map(this::seatIdFromKey).sorted().toList();
     }
 
-    private String buildKey(Long showId, Long seatId) {
-        return "show:" + showId + ":seat:" + seatId;
+    /** Verifies that every seat remains held by the authenticated owner before payment. */
+    public boolean areSeatsHeldBy(Long showId, List<Long> seatIds, String userId) {
+        if (showId == null || seatIds == null || seatIds.isEmpty() || userId == null || userId.isBlank()) return false;
+        String prefix = ownerPrefix(userId);
+        for (Long seatId : normalizedSeatIds(seatIds)) {
+            String token = usesInMemoryStore()
+                    ? testHolds.get(lockKey(showId, seatId))
+                    : redisTemplate.opsForValue().get(lockKey(showId, seatId));
+            if (token == null || !token.startsWith(prefix)) return false;
+        }
+        return true;
     }
 
-    @Data
-    @AllArgsConstructor
-    private static class SeatHoldInfo {
-        private Long showId;
-        private Long seatId;
-        private String userId;
-        private String sessionId;
-        private long expiresAt;
+    private boolean acquireRedis(Long showId, List<Long> seats, String prefix, String token, String sessionId) {
+        List<String> keys = seats.stream().map(seatId -> lockKey(showId, seatId)).toList();
+        Long result = redisTemplate.execute(ACQUIRE_LOCKS, keys, prefix, token, String.valueOf(holdTtl.toMillis()),
+                sessionKey(sessionId == null ? "REST_CLIENT" : sessionId));
+        return Long.valueOf(1L).equals(result);
+    }
+
+    private long releaseRedis(Long showId, List<Long> seats, String owner, String sessionKey) {
+        Long result = redisTemplate.execute(RELEASE_LOCKS, seats.stream().map(seatId -> lockKey(showId, seatId)).toList(), owner, sessionKey);
+        return result == null ? 0 : result;
+    }
+
+    private synchronized boolean acquireInMemory(Long showId, List<Long> seats, String prefix, String token, String sessionId) {
+        for (Long seatId : seats) {
+            String current = testHolds.get(lockKey(showId, seatId));
+            if (current != null && !current.startsWith(prefix)) return false;
+        }
+        String session = sessionId == null ? "REST_CLIENT" : sessionId;
+        for (Long seatId : seats) {
+            String key = lockKey(showId, seatId);
+            testHolds.put(key, token);
+            testSessionHolds.computeIfAbsent(session, ignored -> ConcurrentHashMap.newKeySet()).add(key);
+        }
+        return true;
+    }
+
+    private synchronized long releaseInMemory(Long showId, List<Long> seats, String owner, String sessionId) {
+        long released = 0;
+        for (Long seatId : seats) {
+            String key = lockKey(showId, seatId);
+            String current = testHolds.get(key);
+            if (current != null && ("*".equals(owner) || current.startsWith(owner))) { testHolds.remove(key); released++; }
+            if (sessionId != null && testSessionHolds.get(sessionId) != null) testSessionHolds.get(sessionId).remove(key);
+        }
+        return released;
+    }
+
+    private synchronized void releaseInMemorySession(String sessionId) {
+        Set<String> keys = testSessionHolds.remove(sessionId);
+        if (keys == null || keys.isEmpty()) return;
+        Map<Long, List<Long>> grouped = groupKeysByShow(keys);
+        keys.forEach(testHolds::remove);
+        grouped.forEach((showId, seats) -> broadcastUpdate(showId, seats, "AVAILABLE", "DISCONNECTED"));
+    }
+
+    private void broadcastUpdate(Long showId, List<Long> seats, String status, String userId) {
+        messagingTemplate.convertAndSend("/topic/shows/" + showId + "/seats", SeatStatusUpdateDto.builder()
+                .showId(showId).seatIds(seats).status(status).userId(userId).timestamp(System.currentTimeMillis()).build());
+    }
+
+    private boolean usesInMemoryStore() { return "memory".equalsIgnoreCase(backend); }
+
+    /**
+     * Renders a Redis failure as exception type plus root-cause detail. The previous fixed
+     * "Redis connection failed" string hid the actual fault: a host-side port-forward that stops
+     * listening reports "Connection refused", which is indistinguishable from auth or timeout
+     * problems until the root cause is printed. Contains no credentials or tokens.
+     */
+    private String describeRedisFailure(Throwable ex) {
+        Throwable root = ex;
+        while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+        return ex.getClass().getSimpleName() + " (redis host=" + redisEndpointDescription() + ") root="
+                + root.getClass().getName() + ": " + root.getMessage();
+    }
+
+    /** Best-effort endpoint description for diagnostics; never includes the Redis password. */
+    private String redisEndpointDescription() {
+        try {
+            org.springframework.data.redis.connection.RedisConnectionFactory factory = redisTemplate.getConnectionFactory();
+            if (factory instanceof org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory lettuce) {
+                return lettuce.getHostName() + ":" + lettuce.getPort();
+            }
+        } catch (RuntimeException ignored) { /* diagnostics must never mask the original failure */ }
+        return "unknown";
+    }
+
+    private void validateRequest(Long showId, List<Long> seats, String userId) {
+        if (showId == null || seats == null || seats.isEmpty() || userId == null || userId.isBlank())
+            throw new IllegalArgumentException("showId, seatIds, and userId are required to hold seats");
+    }
+    private List<Long> normalizedSeatIds(Collection<Long> seats) { return seats.stream().filter(java.util.Objects::nonNull).distinct().sorted().toList(); }
+    private String lockKey(Long showId, Long seatId) { return lockPrefix(showId) + seatId; }
+    private String lockPrefix(Long showId) { return LOCK_PREFIX + showId + ":seat:"; }
+    private String sessionKey(String sessionId) { return SESSION_PREFIX + encode(sessionId); }
+    private String ownerPrefix(String userId) { return encode(userId) + "."; }
+    private String encode(String value) { return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8)); }
+    private Long seatIdFromKey(String key) { return Long.valueOf(key.substring(key.lastIndexOf(':') + 1)); }
+    private Map<Long, List<Long>> groupKeysByShow(Collection<String> keys) {
+        Map<Long, List<Long>> result = new HashMap<>();
+        for (String key : keys) {
+            String[] parts = key.split(":");
+            if (parts.length >= 6) result.computeIfAbsent(Long.valueOf(parts[3]), ignored -> new ArrayList<>()).add(Long.valueOf(parts[5]));
+        }
+        return result;
     }
 }

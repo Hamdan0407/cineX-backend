@@ -20,6 +20,8 @@ public class Screen {
     private Integer totalRows;
     private Integer totalColumns;
     private String seatCategories;
+    /** Identifies the deterministic seat layout profile for this screen. */
+    private String layoutProfile;
     @ManyToOne
     private Theatre theatre;
 }

@@ -32,7 +32,11 @@ public class WebSocketEventListener {
         String sessionId = headerAccessor.getSessionId();
         log.info("WebSocket session [{}] disconnected. Initiating seat lock cleanup.", sessionId);
         if (sessionId != null) {
-            seatLockService.handleSessionDisconnect(sessionId);
+            try {
+                seatLockService.handleSessionDisconnect(sessionId);
+            } catch (org.springframework.data.redis.RedisConnectionFailureException ex) {
+                log.warn("Redis was unavailable while cleaning up disconnected WebSocket session {}", sessionId);
+            }
         }
     }
 }

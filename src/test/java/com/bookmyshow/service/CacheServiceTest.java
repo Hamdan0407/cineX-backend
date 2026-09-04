@@ -1,6 +1,7 @@
 package com.bookmyshow.service;
 
-import com.bookmyshow.dto.MovieDto;
+import com.bookmyshow.dto.MovieRequest;
+import com.bookmyshow.dto.MovieResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -57,11 +58,11 @@ public class CacheServiceTest {
     @DisplayName("Verify @Cacheable Hit/Miss behavior on MovieService")
     void testMovieCachingBehavior() {
         // 1st call -> Cache Miss
-        List<MovieDto> firstCall = movieService.getAllMovies();
+        List<MovieResponse> firstCall = movieService.getAllMovies();
         assertNotNull(firstCall);
 
         // 2nd call -> Cache Hit
-        List<MovieDto> secondCall = movieService.getAllMovies();
+        List<MovieResponse> secondCall = movieService.getAllMovies();
         assertNotNull(secondCall);
         assertEquals(firstCall.size(), secondCall.size());
 
@@ -79,7 +80,7 @@ public class CacheServiceTest {
     void testCacheEvictionOnAddMovie() {
         movieService.getAllMovies(); // Populate cache
 
-        MovieDto newMovie = new MovieDto();
+        MovieRequest newMovie = new MovieRequest();
         newMovie.setTitle("Test Cached Movie");
         newMovie.setDescription("Testing cache eviction");
         newMovie.setDuration(130);

@@ -15,7 +15,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -40,6 +45,7 @@ public class RazorpayPaymentServiceTest {
 
     @BeforeEach
     void setUp() {
+        authenticateAs("clerk_test_123");
         Booking booking = new Booking();
         booking.setClerkUserId("clerk_test_123");
         booking.setMovieTitle("Inception");
@@ -53,6 +59,7 @@ public class RazorpayPaymentServiceTest {
 
     @Test
     void testCreateOrder_SecurityCheck_UnauthorizedUser_ThrowsException() {
+        authenticateAs("clerk_hacker_999");
         CreateOrderRequest request = new CreateOrderRequest(testBookingId, "clerk_hacker_999");
         assertThrows(SecurityException.class, () -> paymentService.createOrder(request));
     }
@@ -146,5 +153,13 @@ public class RazorpayPaymentServiceTest {
         // Second duplicate verification request
         PaymentResponse res2 = paymentService.verifyPayment(request);
         assertEquals("SUCCESS", res2.getStatus());
+    }
+
+    private void authenticateAs(String clerkUserId) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        clerkUserId,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_USER"))));
     }
 }

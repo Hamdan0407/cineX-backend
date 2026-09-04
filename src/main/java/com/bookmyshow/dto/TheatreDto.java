@@ -1,12 +1,8 @@
 package com.bookmyshow.dto;
 
-import lombok.Data;
-
-@Data
-public class TheatreDto {
-    private Long id;
-    private String name;
-    private String city;
-    private String address;
-    private String amenities;
+/**
+ * @deprecated Use {@link TheatreRequest} for writes and {@link TheatreResponse} for reads.
+ */
+@Deprecated
+public class TheatreDto extends TheatreResponse {
 }

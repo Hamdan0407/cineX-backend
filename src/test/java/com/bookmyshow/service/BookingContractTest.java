@@ -100,9 +100,11 @@ class BookingContractTest {
 
     @Test
     void validShowAndSeatsCreateBookingRelationships() {
-        BookingResponse response = bookingService.createBooking(request(targetShow.getId(), List.of(targetSeat.getId())));
+        BookingResponse response = bookingService.createBooking(
+                request(targetShow.getId(), List.of(targetSeat.getId())), "contract-test-user");
 
         assertEquals(targetShow.getId(), response.getShowId());
+        assertEquals(500.0, response.getAmount());
         List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(response.getBookingId());
         assertEquals(1, bookingSeats.size());
         assertEquals(targetSeat.getId(), bookingSeats.get(0).getSeat().getId());
@@ -112,36 +114,55 @@ class BookingContractTest {
     @Test
     void nonExistentShowIsRejected() {
         assertThrows(ResourceNotFoundException.class,
-                () -> bookingService.createBooking(request(Long.MAX_VALUE, List.of(targetSeat.getId()))));
+                () -> bookingService.createBooking(request(Long.MAX_VALUE, List.of(targetSeat.getId())), "contract-test-user"));
     }
 
     @Test
     void nonExistentSeatIsRejected() {
         assertThrows(ResourceNotFoundException.class,
-                () -> bookingService.createBooking(request(targetShow.getId(), List.of(Long.MAX_VALUE))));
+                () -> bookingService.createBooking(request(targetShow.getId(), List.of(Long.MAX_VALUE)), "contract-test-user"));
     }
 
     @Test
     void seatFromAnotherScreenIsRejected() {
         assertThrows(ValidationException.class,
-                () -> bookingService.createBooking(request(targetShow.getId(), List.of(otherScreenSeat.getId()))));
+                () -> bookingService.createBooking(request(targetShow.getId(), List.of(otherScreenSeat.getId())), "contract-test-user"));
     }
 
     @Test
     void mixedValidAndForeignSeatsRejectEntireBooking() {
         assertThrows(ValidationException.class,
                 () -> bookingService.createBooking(request(targetShow.getId(),
-                        List.of(targetSeat.getId(), otherScreenSeat.getId()))));
+                        List.of(targetSeat.getId(), otherScreenSeat.getId())), "contract-test-user"));
     }
 
     @Test
     void alreadyBookedSeatIsRejected() {
-        BookingResponse firstBooking = bookingService.createBooking(request(targetShow.getId(), List.of(targetSeat.getId())));
+        BookingResponse firstBooking = bookingService.createBooking(
+                request(targetShow.getId(), List.of(targetSeat.getId())), "contract-test-user");
         List<BookingSeat> bookingSeats = bookingSeatRepository.findByBookingId(firstBooking.getBookingId());
         bookingSeats.forEach(bookingSeat -> bookingSeat.setStatus("BOOKED"));
         bookingSeatRepository.saveAll(bookingSeats);
 
         assertThrows(SeatAlreadyBookedException.class,
-                () -> bookingService.createBooking(request(targetShow.getId(), List.of(targetSeat.getId()))));
+                () -> bookingService.createBooking(request(targetShow.getId(), List.of(targetSeat.getId())), "contract-test-user"));
+    }
+
+    @Test
+    void frontendAmountIsIgnoredAndCalculatedServerSide() {
+        BookingRequest req = request(targetShow.getId(), List.of(targetSeat.getId()));
+        req.setAmount(1.0);
+        BookingResponse response = bookingService.createBooking(req, "contract-test-user");
+        assertEquals(500.0, response.getAmount());
+    }
+
+    @Test
+    void frontendCityCannotOverrideTheShowTheatreCity() {
+        BookingRequest req = request(targetShow.getId(), List.of(targetSeat.getId()));
+        req.setCityName("Mumbai");
+
+        BookingResponse response = bookingService.createBooking(req, "contract-test-user");
+
+        assertEquals("Test City", response.getCityName());
     }
 }

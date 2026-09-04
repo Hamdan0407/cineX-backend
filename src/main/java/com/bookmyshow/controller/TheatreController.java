@@ -1,6 +1,7 @@
 package com.bookmyshow.controller;
 
-import com.bookmyshow.dto.TheatreDto;
+import com.bookmyshow.dto.TheatreRequest;
+import com.bookmyshow.dto.TheatreResponse;
 import com.bookmyshow.service.TheatreService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,29 +28,23 @@ public class TheatreController {
         this.adminAuthService = adminAuthService;
     }
 
-    @Operation(summary = "@PostMapping operation for ResponseEntity<TheatreDto>")
+    @Operation(summary = "Create theatre")
     @PostMapping
-    public ResponseEntity<TheatreDto> addTheatre(@Valid @RequestBody TheatreDto dto,
-                                                 @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                                 @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
+    public ResponseEntity<TheatreResponse> addTheatre(@Valid @RequestBody TheatreRequest request) {
         adminAuthService.validateAdmin();
-        return new ResponseEntity<>(theatreService.addTheatre(dto), HttpStatus.CREATED);
+        return new ResponseEntity<>(theatreService.addTheatre(request), HttpStatus.CREATED);
     }
 
     @Operation(summary = "Update theatre")
     @PutMapping("/{id}")
-    public ResponseEntity<TheatreDto> updateTheatre(@PathVariable Long id, @Valid @RequestBody TheatreDto dto,
-                                                    @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                                    @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
+    public ResponseEntity<TheatreResponse> updateTheatre(@PathVariable Long id, @Valid @RequestBody TheatreRequest request) {
         adminAuthService.validateAdmin();
-        return ResponseEntity.ok(theatreService.updateTheatre(id, dto));
+        return ResponseEntity.ok(theatreService.updateTheatre(id, request));
     }
 
     @Operation(summary = "Delete theatre")
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteTheatre(@PathVariable Long id,
-                                           @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                           @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
+    public ResponseEntity<?> deleteTheatre(@PathVariable Long id) {
         adminAuthService.validateAdmin();
         theatreService.deleteTheatre(id);
         return ResponseEntity.ok("Theatre deleted successfully");
@@ -60,7 +55,7 @@ public class TheatreController {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved theatres list")
     })
     @GetMapping
-    public ResponseEntity<List<TheatreDto>> getAllTheatres() {
+    public ResponseEntity<List<TheatreResponse>> getAllTheatres() {
         return ResponseEntity.ok(theatreService.getAllTheatres());
     }
 
@@ -70,12 +65,8 @@ public class TheatreController {
         @ApiResponse(responseCode = "404", description = "Theatre not found with given ID")
     })
     @GetMapping("/{id}")
-    public ResponseEntity<?> getTheatreById(@PathVariable Long id) {
-        try {
-            return ResponseEntity.ok(theatreService.getTheatreById(id));
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
-        }
+    public ResponseEntity<TheatreResponse> getTheatreById(@PathVariable Long id) {
+        return ResponseEntity.ok(theatreService.getTheatreById(id));
     }
 
     @Operation(summary = "Get theatres by city", description = "Filters theatres by city name (case-insensitive).")
@@ -83,7 +74,7 @@ public class TheatreController {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved city theatres")
     })
     @GetMapping("/city/{city}")
-    public ResponseEntity<List<TheatreDto>> getTheatresByCity(@PathVariable String city) {
+    public ResponseEntity<List<TheatreResponse>> getTheatresByCity(@PathVariable String city) {
         return ResponseEntity.ok(theatreService.getTheatresByCity(city));
     }
 
@@ -95,7 +86,7 @@ public class TheatreController {
 
     @Operation(summary = "Get paginated theatres with size and sorting")
     @GetMapping("/paginated")
-    public ResponseEntity<Page<TheatreDto>> getTheatresPaginated(
+    public ResponseEntity<Page<TheatreResponse>> getTheatresPaginated(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "id") String sortBy,
@@ -105,7 +96,7 @@ public class TheatreController {
 
     @Operation(summary = "Search paginated theatres with size and sorting")
     @GetMapping("/search/paginated")
-    public ResponseEntity<Page<TheatreDto>> searchTheatresPaginated(
+    public ResponseEntity<Page<TheatreResponse>> searchTheatresPaginated(
             @RequestParam String query,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,

@@ -8,7 +8,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
@@ -21,12 +23,16 @@ public class SeatLockServiceTest {
     @Mock
     private SimpMessagingTemplate messagingTemplate;
 
+    @Mock
+    private StringRedisTemplate redisTemplate;
+
     @InjectMocks
     private SeatLockService seatLockService;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        ReflectionTestUtils.setField(seatLockService, "backend", "memory");
     }
 
     @Test
@@ -75,6 +81,29 @@ public class SeatLockServiceTest {
 
         seatLockService.handleSessionDisconnect("session-disconnect");
         assertTrue(seatLockService.getHeldSeatIds(101L).isEmpty(), "Seats should be released upon disconnect");
+    }
+
+    @Test
+    @DisplayName("Should reject release attempts from another user")
+    void testPreventReleaseByAnotherUser() {
+        seatLockService.holdSeats(101L, List.of(1L), "user-A", "session-1");
+
+        seatLockService.releaseSeats(101L, List.of(1L), "user-B", "session-2");
+
+        List<Long> held = seatLockService.getHeldSeatIds(101L);
+        assertEquals(1, held.size(), "Another user must not be able to release held seats");
+        assertTrue(held.contains(1L));
+    }
+
+    @Test
+    @DisplayName("Should allow same user to extend hold on already-held seats")
+    void testSameUserCanRefreshHold() {
+        assertTrue(seatLockService.holdSeats(101L, List.of(4L), "user-A", "session-1"));
+        assertTrue(seatLockService.holdSeats(101L, List.of(4L, 5L), "user-A", "session-1"));
+
+        List<Long> held = seatLockService.getHeldSeatIds(101L);
+        assertEquals(2, held.size());
+        assertTrue(held.containsAll(List.of(4L, 5L)));
     }
 
     @Test

@@ -46,6 +46,9 @@ public class BookingService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private SeatLockService seatLockService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AbandonedCheckoutService abandonedCheckoutService;
+
     public BookingService(BookingRepository bookingRepository, BookingSeatRepository bookingSeatRepository,
                           UserRepository userRepository, ShowRepository showRepository, SeatRepository seatRepository,
                           PaymentService paymentService, EmailService emailService) {
@@ -60,7 +63,7 @@ public class BookingService {
 
     @Transactional
     @CacheEvict(value = "shows", allEntries = true)
-    public BookingResponse createBooking(BookingRequest request) {
+    public BookingResponse createBooking(BookingRequest request, String authenticatedClerkUserId) {
         if (request.getShowId() == null) {
             throw new ValidationException("showId is required");
         }
@@ -68,17 +71,14 @@ public class BookingService {
             throw new ValidationException("At least one seatId is required");
         }
 
-        User user = null;
-        if (request.getUserId() != null) {
-            user = userRepository.findById(request.getUserId())
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found: " + request.getUserId()));
+        if (authenticatedClerkUserId == null || authenticatedClerkUserId.isBlank()) {
+            throw new ValidationException("Authenticated user is required to create a booking");
         }
 
         Show show = showRepository.findById(request.getShowId())
                 .orElseThrow(() -> new ResourceNotFoundException("Show not found: " + request.getShowId()));
 
         List<Seat> seatsToBook = new ArrayList<>();
-        Double totalAmount = request.getAmount() != null ? request.getAmount() : 0.0;
 
         // Sort IDs before acquiring pessimistic locks to prevent transaction deadlocks.
         List<Long> sortedSeatIds = request.getSeatIds().stream()
@@ -100,28 +100,50 @@ public class BookingService {
             }
             seatsToBook.add(seat);
         }
-        if (request.getAmount() == null) {
-            totalAmount = seatsToBook.size() * show.getPrice();
+
+        Booking existingPending = findMatchingPendingBooking(authenticatedClerkUserId, show.getId(), sortedSeatIds);
+        if (existingPending != null) {
+            log.info("Reusing pending booking {} for clerk user {} show {}", existingPending.getId(), authenticatedClerkUserId, show.getId());
+            return mapToDto(existingPending, seatsToBook);
+        }
+
+        if (seatLockService != null) {
+            boolean held = seatLockService.holdSeats(show.getId(), sortedSeatIds, authenticatedClerkUserId, "BOOKING:" + authenticatedClerkUserId);
+            if (!held) {
+                throw new SeatAlreadyBookedException("One or more seats are held by another user");
+            }
+        }
+
+        double totalAmount = seatsToBook.stream().mapToDouble(seat -> priceForSeat(show, seat)).sum();
+
+        User user = null;
+        if (request.getUserId() != null) {
+            user = userRepository.findById(request.getUserId()).orElse(null);
         }
 
         Booking booking = new Booking();
         booking.setUser(user);
-        booking.setClerkUserId(request.getClerkUserId());
+        booking.setClerkUserId(authenticatedClerkUserId);
         booking.setShow(show);
-        booking.setMovieId(request.getMovieId() != null ? request.getMovieId() : (show != null && show.getMovie() != null ? show.getMovie().getId() : null));
-        booking.setTheatreId(request.getTheatreId() != null ? request.getTheatreId() : (show != null && show.getScreen() != null && show.getScreen().getTheatre() != null ? show.getScreen().getTheatre().getId() : null));
-        
+        booking.setMovieId(show.getMovie() != null ? show.getMovie().getId() : request.getMovieId());
+        booking.setTheatreId(show.getScreen() != null && show.getScreen().getTheatre() != null
+                ? show.getScreen().getTheatre().getId() : request.getTheatreId());
+
         String seatsStr = seatsToBook.stream().map(Seat::getSeatNumber).collect(Collectors.joining(","));
         booking.setSeatIds(seatsStr);
         booking.setAmount(totalAmount);
         booking.setTotalAmount(totalAmount);
-        
-        booking.setMovieTitle(request.getMovieTitle() != null ? request.getMovieTitle() : (show != null && show.getMovie() != null ? show.getMovie().getTitle() : "Movie"));
-        booking.setPosterPath(request.getPosterPath() != null ? request.getPosterPath() : (show != null && show.getMovie() != null ? show.getMovie().getPosterPath() : ""));
-        booking.setTheatreName(request.getTheatreName() != null ? request.getTheatreName() : (show != null && show.getScreen() != null && show.getScreen().getTheatre() != null ? show.getScreen().getTheatre().getName() : "CineX Theatre"));
-        booking.setCityName(request.getCityName() != null ? request.getCityName() : "Mumbai");
-        booking.setShowDate(request.getShowDate() != null ? request.getShowDate() : (show != null && show.getShowDate() != null ? show.getShowDate().toString() : "Today"));
-        booking.setShowTime(request.getShowTime() != null ? request.getShowTime() : (show != null && show.getShowTime() != null ? show.getShowTime().toString() : "Now"));
+
+        booking.setMovieTitle(show.getMovie() != null ? show.getMovie().getTitle() : request.getMovieTitle());
+        booking.setPosterPath(show.getMovie() != null && show.getMovie().getPosterPath() != null
+                ? show.getMovie().getPosterPath() : request.getPosterPath());
+        booking.setTheatreName(show.getScreen() != null && show.getScreen().getTheatre() != null
+                ? show.getScreen().getTheatre().getName() : request.getTheatreName());
+        booking.setCityName(show.getScreen() != null && show.getScreen().getTheatre() != null
+                && show.getScreen().getTheatre().getCity() != null
+                ? show.getScreen().getTheatre().getCity() : request.getCityName());
+        booking.setShowDate(show.getShowDate() != null ? show.getShowDate().toString() : request.getShowDate());
+        booking.setShowTime(show.getShowTime() != null ? show.getShowTime().toString() : request.getShowTime());
         booking.setUserEmail(request.getUserEmail() != null ? request.getUserEmail() : (user != null ? user.getEmail() : null));
         
         booking.setStatus("PENDING");
@@ -140,6 +162,10 @@ public class BookingService {
                 bookingSeats.add(bs);
             }
             bookingSeatRepository.saveAll(bookingSeats);
+        }
+
+        if (abandonedCheckoutService != null) {
+            abandonedCheckoutService.trackCheckoutStarted(booking);
         }
 
         return mapToDto(booking, seatsToBook);
@@ -249,6 +275,31 @@ public class BookingService {
         return mapToDto(updated, null);
     }
 
+    static double priceForSeat(Show show, Seat seat) {
+        double seatPrice = show.getPrice() != null ? show.getPrice() : 0.0;
+        if (seat.getPrice() != null) {
+            seatPrice += seat.getPrice();
+        } else if ("PREMIUM".equals(seat.getSeatType())) {
+            seatPrice += 50.0;
+        }
+        return seatPrice;
+    }
+
+    private Booking findMatchingPendingBooking(String clerkUserId, Long showId, List<Long> seatIds) {
+        List<Booking> pending = bookingRepository.findByClerkUserIdAndShow_IdAndBookingStatus(
+                clerkUserId, showId, "PENDING_PAYMENT");
+        for (Booking existing : pending) {
+            List<Long> existingSeatIds = bookingSeatRepository.findByBookingId(existing.getId()).stream()
+                    .map(bs -> bs.getSeat().getId())
+                    .sorted()
+                    .collect(Collectors.toList());
+            if (existingSeatIds.equals(seatIds)) {
+                return existing;
+            }
+        }
+        return null;
+    }
+
     private BookingResponse mapToDto(Booking booking, List<Seat> seats) {
         BookingResponse dto = new BookingResponse();
         dto.setBookingId(booking.getId());
@@ -271,6 +322,7 @@ public class BookingService {
             }
             dto.setShowDate(booking.getShow().getShowDate() != null ? booking.getShow().getShowDate().toString() : "");
             dto.setShowTime(booking.getShow().getShowTime() != null ? booking.getShow().getShowTime().toString() : "");
+            dto.setScreenName(booking.getShow().getScreen() != null ? booking.getShow().getScreen().getScreenName() : dto.getScreenName());
         } else {
             dto.setMovieId(booking.getMovieId());
             dto.setTheatreId(booking.getTheatreId());

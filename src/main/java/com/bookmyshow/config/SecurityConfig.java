@@ -28,10 +28,15 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final ClerkJwtAuthenticationFilter clerkJwtAuthenticationFilter;
+    private final SecurityErrorResponseHandler securityErrorResponseHandler;
 
     @Value("${clerk.issuer:}")
     private String clerkIssuer;
+
+    @Bean
+    public ClerkJwtAuthenticationFilter clerkJwtAuthenticationFilter() {
+        return new ClerkJwtAuthenticationFilter(securityErrorResponseHandler);
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -52,15 +57,19 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, ClerkJwtAuthenticationFilter clerkJwtAuthenticationFilter) throws Exception {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
             .headers(headers -> headers.frameOptions(frame -> frame.disable())) // Required for H2 console
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(ex -> ex
+                    .authenticationEntryPoint(securityErrorResponseHandler.authenticationEntryPoint())
+                    .accessDeniedHandler(securityErrorResponseHandler.accessDeniedHandler()))
             .authorizeHttpRequests(auth -> {
                 // Public GET endpoints
-                auth.requestMatchers(HttpMethod.GET, "/api/movies/**", "/api/theatres/**", "/api/shows/**", "/api/tmdb/**", "/api/seats/screen/**").permitAll();
+                auth.requestMatchers(HttpMethod.GET, "/api/movies/**", "/api/theatres/**", "/api/shows/**", "/api/tmdb/**", "/api/media/**", "/api/seats/screen/**").permitAll();
+                auth.requestMatchers(HttpMethod.GET, "/api/cities", "/api/cities/search").permitAll();
                 // Public POST user registration/login
                 auth.requestMatchers(HttpMethod.POST, "/api/auth/**").permitAll();
                 // Documentation & Monitoring & WebSockets
@@ -73,7 +82,7 @@ public class SecurityConfig {
                 // Admin only endpoints
                 auth.requestMatchers("/api/admin/**", "/api/cache/**").hasRole("ADMIN");
                 // Authenticated user endpoints
-                auth.requestMatchers("/api/bookings/**", "/api/payments/**", "/api/tickets/**").hasAnyRole("USER", "ADMIN");
+                auth.requestMatchers("/api/bookings/**", "/api/payments/**", "/api/tickets/**", "/api/wallet/**", "/api/coupons/**").hasAnyRole("USER", "ADMIN");
                 // All other requests must be authenticated
                 auth.anyRequest().authenticated();
             })

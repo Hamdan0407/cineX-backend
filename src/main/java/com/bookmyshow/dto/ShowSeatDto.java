@@ -9,4 +9,8 @@ public class ShowSeatDto {
     private String seatType;
     private String status;
     private Double price;
+    private String rowLabel;
+    private Integer rowIndex;
+    private Integer columnIndex;
+    private Boolean wheelchairAccessible;
 }

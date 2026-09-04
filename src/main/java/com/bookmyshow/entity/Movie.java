@@ -29,4 +29,9 @@ public class Movie {
     private String cast;
     private String certification;
     private String status;
+    @Column(unique = true)
+    private Long tmdbId;
+    /** When true, movie is part of the current TMDB now-playing catalogue and may appear to customers. */
+    @Column(nullable = true)
+    private Boolean catalogActive = false;
 }

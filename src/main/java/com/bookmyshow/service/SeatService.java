@@ -1,6 +1,10 @@
 package com.bookmyshow.service;
 
 import com.bookmyshow.dto.SeatDto;
+import com.bookmyshow.dto.SeatLayoutRequest;
+import com.bookmyshow.dto.SeatRequest;
+import com.bookmyshow.dto.SeatResponse;
+import com.bookmyshow.dto.mapper.SeatMapper;
 import com.bookmyshow.entity.Screen;
 import com.bookmyshow.entity.Seat;
 import com.bookmyshow.repository.ScreenRepository;
@@ -12,7 +16,6 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 
 import com.bookmyshow.exception.ResourceNotFoundException;
-import com.bookmyshow.dto.SeatLayoutRequest;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.Map;
@@ -29,7 +32,7 @@ public class SeatService {
     }
 
     @Transactional
-    public List<SeatDto> buildSeatLayout(Long screenId, SeatLayoutRequest request) {
+    public List<SeatResponse> buildSeatLayout(Long screenId, SeatLayoutRequest request) {
         Screen screen = screenRepository.findById(screenId)
             .orElseThrow(() -> new ResourceNotFoundException("Screen not found"));
 
@@ -79,28 +82,42 @@ public class SeatService {
                 seat.setSeatNumber(rowStr + c);
                 seat.setSeatType(category);
                 seat.setPrice(price);
+                seat.setRowLabel(rowStr);
+                seat.setRowIndex(r);
+                seat.setColumnIndex(c - 1);
+                seat.setWheelchairAccessible(false);
                 seat.setScreen(screen);
                 seats.add(seat);
             }
             rowChar++;
         }
 
-        List<Seat> savedSeats = seatRepository.saveAll(seats);
-        return savedSeats.stream().map(this::mapToDto).collect(Collectors.toList());
+        return seatRepository.saveAll(seats).stream().map(SeatMapper::toResponse).collect(Collectors.toList());
     }
 
-    public List<SeatDto> bulkCreateSeats(Long screenId) {
+    public List<SeatResponse> bulkCreateSeats(Long screenId) {
         SeatLayoutRequest defaultReq = new SeatLayoutRequest();
         return buildSeatLayout(screenId, defaultReq);
     }
 
-    public SeatDto updateSeat(Long id, SeatDto dto) {
+    public SeatResponse updateSeat(Long id, SeatRequest request) {
         Seat seat = seatRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Seat not found"));
-        if (dto.getSeatNumber() != null) seat.setSeatNumber(dto.getSeatNumber());
-        if (dto.getSeatType() != null) seat.setSeatType(dto.getSeatType());
-        if (dto.getPrice() != null) seat.setPrice(dto.getPrice());
-        return mapToDto(seatRepository.save(seat));
+        if (request.getSeatNumber() != null) {
+            seat.setSeatNumber(request.getSeatNumber());
+        }
+        if (request.getSeatType() != null) {
+            seat.setSeatType(request.getSeatType());
+        }
+        if (request.getPrice() != null) {
+            seat.setPrice(request.getPrice());
+        }
+        return SeatMapper.toResponse(seatRepository.save(seat));
+    }
+
+    @Deprecated
+    public SeatResponse updateSeat(Long id, SeatDto dto) {
+        return updateSeat(id, SeatMapper.toRequest(dto));
     }
 
     public void deleteSeat(Long id) {
@@ -110,18 +127,8 @@ public class SeatService {
         seatRepository.deleteById(id);
     }
 
-    public List<SeatDto> getSeatsByScreen(Long screenId) {
+    public List<SeatResponse> getSeatsByScreen(Long screenId) {
         return seatRepository.findByScreenId(screenId).stream()
-                .map(this::mapToDto).collect(Collectors.toList());
-    }
-
-    private SeatDto mapToDto(Seat seat) {
-        SeatDto dto = new SeatDto();
-        dto.setId(seat.getId());
-        dto.setSeatNumber(seat.getSeatNumber());
-        dto.setSeatType(seat.getSeatType());
-        dto.setPrice(seat.getPrice());
-        dto.setScreenId(seat.getScreen().getId());
-        return dto;
+                .map(SeatMapper::toResponse).collect(Collectors.toList());
     }
 }

@@ -12,6 +12,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.List;
 
@@ -26,6 +27,12 @@ public class SeatWebSocketController {
     @Autowired
     private SeatLockService seatLockService;
 
+    @Autowired
+    private com.bookmyshow.service.AdminAuthService adminAuthService;
+
+    @Value("${cinex.security.allow-test-auth-bypass:false}")
+    private boolean allowTestAuthBypass;
+
     /**
      * STOMP message handler for seat selection/deselection over WebSocket.
      * Destination: /app/shows/select-seat
@@ -36,10 +43,13 @@ public class SeatWebSocketController {
         log.info("Received STOMP seat action [{}] from user [{}] (session: [{}]) for show {} seats {}",
                 request.getAction(), request.getUserId(), sessionId, request.getShowId(), request.getSeatIds());
 
+        String lockUserId = resolveLockUserId(request);
         if ("SELECT".equalsIgnoreCase(request.getAction())) {
-            seatLockService.holdSeats(request.getShowId(), request.getSeatIds(), request.getUserId(), sessionId);
+            boolean locked = seatLockService.holdSeats(request.getShowId(), request.getSeatIds(), lockUserId, sessionId);
+            log.info("STOMP seat lock completed show={} seats={} principalPresent=true result={}",
+                    request.getShowId(), request.getSeatIds(), locked);
         } else if ("DESELECT".equalsIgnoreCase(request.getAction())) {
-            seatLockService.releaseSeats(request.getShowId(), request.getSeatIds(), request.getUserId(), sessionId);
+            seatLockService.releaseSeats(request.getShowId(), request.getSeatIds(), lockUserId, sessionId);
         } else {
             log.warn("Unknown seat selection action: {}", request.getAction());
         }
@@ -51,8 +61,11 @@ public class SeatWebSocketController {
     @ResponseBody
     @PostMapping("/api/shows/{showId}/seats/lock")
     @Operation(summary = "Lock seats temporarily via REST API")
-    public ResponseEntity<Boolean> lockSeatsRest(@PathVariable Long showId, @RequestBody SeatSelectRequestDto request) {
-        boolean success = seatLockService.holdSeats(showId, request.getSeatIds(), request.getUserId(), "REST_CLIENT");
+    public ResponseEntity<Boolean> lockSeatsRest(@PathVariable Long showId, @RequestBody SeatSelectRequestDto request,
+                                                  @RequestHeader(value = "X-Seat-Lock-Session", required = false) String sessionId) {
+        String lockUserId = resolveLockUserId(request);
+        boolean success = seatLockService.holdSeats(showId, request.getSeatIds(), lockUserId, sessionId);
+        log.info("REST seat lock completed show={} seats={} principalPresent=true result={}", showId, request.getSeatIds(), success);
         if (success) {
             return ResponseEntity.ok(true);
         } else {
@@ -66,9 +79,23 @@ public class SeatWebSocketController {
     @ResponseBody
     @DeleteMapping("/api/shows/{showId}/seats/lock")
     @Operation(summary = "Release temporarily locked seats via REST API")
-    public ResponseEntity<Void> unlockSeatsRest(@PathVariable Long showId, @RequestBody SeatSelectRequestDto request) {
-        seatLockService.releaseSeats(showId, request.getSeatIds(), request.getUserId(), null);
+    public ResponseEntity<Void> unlockSeatsRest(@PathVariable Long showId, @RequestBody SeatSelectRequestDto request,
+                                                 @RequestHeader(value = "X-Seat-Lock-Session", required = false) String sessionId) {
+        seatLockService.releaseSeats(showId, request.getSeatIds(), resolveLockUserId(request), sessionId);
         return ResponseEntity.ok().build();
+    }
+
+    private String resolveLockUserId(SeatSelectRequestDto request) {
+        try {
+            return adminAuthService.getAuthenticatedClerkUserId();
+        } catch (SecurityException ex) {
+            // Only H2/controller tests may exercise the legacy no-token path. Runtime lock ownership
+            // always comes from the verified Clerk principal, never from the JSON request body.
+            if (allowTestAuthBypass && request.getUserId() != null && !request.getUserId().isBlank()) {
+                return request.getUserId();
+            }
+            throw ex;
+        }
     }
 
     /**

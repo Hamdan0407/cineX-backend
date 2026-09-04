@@ -9,18 +9,23 @@ import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.auth0.jwt.interfaces.JWTVerifier;
+import com.bookmyshow.config.SecurityErrorResponseHandler;
+import com.bookmyshow.security.ClerkJwtRoleResolver;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.Ordered;
-import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -34,15 +39,10 @@ import java.util.List;
  * issued by Clerk, validates token signature, expiration and structure, and populates Spring Security's SecurityContext.
  */
 @Slf4j
-@Component
-@Order(Ordered.HIGHEST_PRECEDENCE + 2)
+@RequiredArgsConstructor
 public class ClerkJwtAuthenticationFilter extends OncePerRequestFilter {
 
-    @Value("${cinex.admin.clerk-user-id:}")
-    private String adminClerkUserId;
-
-    @Value("${cinex.admin.email:admin@cinex.com}")
-    private String adminEmail;
+    private final SecurityErrorResponseHandler securityErrorResponseHandler;
 
     @Value("${clerk.jwks-url:}")
     private String jwksUrl;
@@ -74,10 +74,15 @@ public class ClerkJwtAuthenticationFilter extends OncePerRequestFilter {
             return true;
         }
         
-        if ("GET".equalsIgnoreCase(method) && 
+        // Mirrors the permitAll GET list in SecurityConfig. /api/cities was absent here while
+        // /api/cities/search was present, so a stale or malformed Clerk token made the public city
+        // catalog answer 401 even though SecurityConfig permits it anonymously. The city picker
+        // could then search cities but never list them.
+        if ("GET".equalsIgnoreCase(method) &&
            (path.startsWith("/api/movies") || path.startsWith("/api/theatres") ||
-            path.startsWith("/api/shows") || path.startsWith("/api/tmdb") || 
-            path.startsWith("/api/seats/screen"))) {
+            path.startsWith("/api/shows") || path.startsWith("/api/tmdb") ||
+            path.startsWith("/api/seats/screen") ||
+            path.equals("/api/cities") || path.equals("/api/cities/search"))) {
             return true;
         }
         
@@ -94,76 +99,80 @@ public class ClerkJwtAuthenticationFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.warn("Missing or invalid Authorization header on protected endpoint: {}", request.getRequestURI());
-            SecurityContextHolder.clearContext();
+            Authentication existingAuth = SecurityContextHolder.getContext().getAuthentication();
+            if (existingAuth == null || !existingAuth.isAuthenticated()
+                    || "anonymousUser".equals(existingAuth.getPrincipal())) {
+                log.warn("Missing or invalid Authorization header on protected endpoint: {}", request.getRequestURI());
+                SecurityContextHolder.clearContext();
+            }
             filterChain.doFilter(request, response);
             return;
         }
 
-        String token = authHeader.substring(7).trim();
         try {
-            DecodedJWT jwt = JWT.decode(token);
-            
-            // Check expiration
-            if (jwt.getExpiresAt() != null && jwt.getExpiresAt().before(new Date())) {
-                log.warn("Expired JWT token received from client: {}", request.getRemoteAddr());
-                SecurityContextHolder.clearContext();
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Expired JWT token");
-                return;
-            }
-
-            // Verify signature using JWKS
-            JwkProvider jwkProvider = getJwkProvider();
-            if (jwkProvider != null) {
-                Jwk jwk = jwkProvider.get(jwt.getKeyId());
-                Algorithm algorithm = Algorithm.RSA256((RSAPublicKey) jwk.getPublicKey(), null);
-                
-                JWTVerifier verifier = JWT.require(algorithm)
-                    .withIssuer(issuer)
-                    .build();
-                
-                verifier.verify(token); // Throws JWTVerificationException if invalid
-            } else if (!isTestEnv()) {
-                log.error("JWKS URL is not configured. Rejecting request.");
-                response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Authentication configuration error");
-                return;
-            } else {
-                // In test environment, skip signature verification if jwks-url is explicitly left blank
-                log.info("Test environment detected without JWKS URL, trusting decoded token");
-            }
-
-            String clerkUserId = jwt.getSubject();
-            if (clerkUserId != null && !clerkUserId.isEmpty()) {
-                request.setAttribute("authenticatedClerkUserId", clerkUserId);
-                
-                String emailClaim = jwt.getClaim("email").asString();
-                // Determine admin based strictly on configured identities, NEVER from client headers
-                boolean isAdmin = clerkUserId.equals(adminClerkUserId) || 
-                                  (emailClaim != null && emailClaim.equalsIgnoreCase(adminEmail));
-                
-                List<SimpleGrantedAuthority> authorities = isAdmin ? 
-                        List.of(new SimpleGrantedAuthority("ROLE_ADMIN"), new SimpleGrantedAuthority("ROLE_USER")) :
-                        List.of(new SimpleGrantedAuthority("ROLE_USER"));
-                
-                UsernamePasswordAuthenticationToken authentication = 
-                        new UsernamePasswordAuthenticationToken(clerkUserId, null, authorities);
-                
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-                log.debug("Authenticated Clerk user [{}] with authorities {}", clerkUserId, authorities);
-            }
-        } catch (JwkException | JWTVerificationException e) {
+            Authentication authentication = authenticate(authHeader.substring(7).trim());
+            request.setAttribute("authenticatedClerkUserId", authentication.getName());
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            // Attribute subsequent log lines to the verified Clerk subject. MdcLoggingFilter owns the
+            // MDC lifecycle and clears it after the request, so nothing leaks between requests.
+            MDC.put("userId", authentication.getName());
+            log.debug("Authenticated Clerk user [{}] with authorities {}", authentication.getName(), authentication.getAuthorities());
+        } catch (IllegalStateException e) {
+            log.error("Clerk JWT verification is unavailable: {}", e.getMessage());
+            SecurityContextHolder.clearContext();
+            securityErrorResponseHandler.writeError(response, HttpStatus.INTERNAL_SERVER_ERROR, "Authentication configuration error");
+            return;
+        } catch (BadCredentialsException e) {
+            log.warn("Rejected Clerk JWT: {}", e.getMessage());
+            SecurityContextHolder.clearContext();
+            securityErrorResponseHandler.writeError(response, HttpStatus.UNAUTHORIZED, e.getMessage());
+            return;
+        } catch (JWTVerificationException e) {
             log.warn("Failed to verify JWT Bearer token signature or claims: {}", e.getMessage());
             SecurityContextHolder.clearContext();
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid JWT token");
+            securityErrorResponseHandler.writeError(response, HttpStatus.UNAUTHORIZED, "Invalid JWT token");
             return;
         } catch (Exception e) {
             log.error("Unexpected error during JWT authentication", e);
             SecurityContextHolder.clearContext();
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentication failed");
+            securityErrorResponseHandler.writeError(response, HttpStatus.UNAUTHORIZED, "Authentication failed");
             return;
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    /** Validates a Clerk JWT for HTTP and STOMP CONNECT authentication. */
+    public Authentication authenticate(String token) {
+        if (token == null || token.isBlank()) {
+            throw new BadCredentialsException("Missing JWT token");
+        }
+        DecodedJWT jwt = JWT.decode(token);
+        if (jwt.getExpiresAt() == null || jwt.getExpiresAt().before(new Date())) {
+            throw new BadCredentialsException("Expired JWT token");
+        }
+
+        JwkProvider jwkProvider = getJwkProvider();
+        if (jwkProvider != null) {
+            try {
+                Jwk jwk = jwkProvider.get(jwt.getKeyId());
+                Algorithm algorithm = Algorithm.RSA256((RSAPublicKey) jwk.getPublicKey(), null);
+                JWT.require(algorithm).withIssuer(issuer).build().verify(token);
+            } catch (JwkException e) {
+                throw new BadCredentialsException("Invalid JWT token", e);
+            }
+        } else if (!isTestEnv()) {
+            throw new IllegalStateException("CLERK_JWKS_URL is not configured");
+        }
+
+        String clerkUserId = jwt.getSubject();
+        if (clerkUserId == null || clerkUserId.isBlank()) {
+            throw new BadCredentialsException("JWT subject is missing");
+        }
+        List<SimpleGrantedAuthority> authorities = ClerkJwtRoleResolver.isAdmin(jwt)
+                ? List.of(new SimpleGrantedAuthority("ROLE_ADMIN"), new SimpleGrantedAuthority("ROLE_USER"))
+                : List.of(new SimpleGrantedAuthority("ROLE_USER"));
+        return new UsernamePasswordAuthenticationToken(clerkUserId, null, authorities);
     }
     
     private boolean isTestEnv() {

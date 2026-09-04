@@ -8,6 +8,7 @@ import com.bookmyshow.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import com.bookmyshow.exception.ValidationException;
+import com.bookmyshow.exception.UnauthorizedException;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
@@ -64,13 +65,18 @@ public class UserService {
             User user = optionalUser.get();
             if (passwordEncoder.matches(request.getPassword(), user.getPassword())) {
                 if (!"ADMIN".equalsIgnoreCase(user.getRole())) {
-                    throw new ValidationException("Access Denied: This account does not have Admin privileges.");
+                    throw new SecurityException("Access Denied: This account does not have Admin privileges.");
                 }
                 return new AuthResponse("admin-token-for-" + user.getEmail(),
                         user.getEmail(), user.getName(), user.getRole());
             }
         }
         
-        throw new ValidationException("Invalid admin credentials");
+        throw new UnauthorizedException("Invalid admin credentials");
+    }
+
+    public org.springframework.data.domain.Page<com.bookmyshow.dto.UserResponse> getUsersPaginated(int page, int size) {
+        return userRepository.findAll(org.springframework.data.domain.PageRequest.of(page, size))
+                .map(com.bookmyshow.dto.mapper.UserMapper::toResponse);
     }
 }

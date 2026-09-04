@@ -1,6 +1,7 @@
 package com.bookmyshow.controller;
 
-import com.bookmyshow.dto.SeatDto;
+import com.bookmyshow.dto.SeatRequest;
+import com.bookmyshow.dto.SeatResponse;
 import com.bookmyshow.service.SeatService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,35 +29,24 @@ public class SeatController {
 
     @Operation(summary = "Build custom seat layout with categories and pricing")
     @PostMapping("/layout/{screenId}")
-    public ResponseEntity<?> buildSeatLayout(@PathVariable Long screenId, @RequestBody SeatLayoutRequest request) {
-        try {
-            adminAuthService.validateAdmin();
-            return new ResponseEntity<>(seatService.buildSeatLayout(screenId, request), HttpStatus.CREATED);
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
+    public ResponseEntity<List<SeatResponse>> buildSeatLayout(@PathVariable Long screenId,
+                                                              @Valid @RequestBody SeatLayoutRequest request) {
+        adminAuthService.validateAdmin();
+        return new ResponseEntity<>(seatService.buildSeatLayout(screenId, request), HttpStatus.CREATED);
     }
 
-    @Operation(summary = "@PostMapping operation for ResponseEntity<?>")
+    @Operation(summary = "Bulk create seats for screen")
     @PostMapping("/screen/{screenId}")
-    public ResponseEntity<?> bulkCreateSeats(@PathVariable Long screenId) {
-        try {
-            adminAuthService.validateAdmin();
-            return new ResponseEntity<>(seatService.bulkCreateSeats(screenId), HttpStatus.CREATED);
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
+    public ResponseEntity<List<SeatResponse>> bulkCreateSeats(@PathVariable Long screenId) {
+        adminAuthService.validateAdmin();
+        return new ResponseEntity<>(seatService.bulkCreateSeats(screenId), HttpStatus.CREATED);
     }
 
     @Operation(summary = "Update single seat")
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateSeat(@PathVariable Long id, @Valid @RequestBody SeatDto dto) {
-        try {
-            adminAuthService.validateAdmin();
-            return ResponseEntity.ok(seatService.updateSeat(id, dto));
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
+    public ResponseEntity<SeatResponse> updateSeat(@PathVariable Long id, @Valid @RequestBody SeatRequest request) {
+        adminAuthService.validateAdmin();
+        return ResponseEntity.ok(seatService.updateSeat(id, request));
     }
 
     @Operation(summary = "Delete single seat")
@@ -67,9 +57,9 @@ public class SeatController {
         return ResponseEntity.ok("Seat deleted successfully");
     }
 
-    @Operation(summary = "@GetMapping operation for ResponseEntity<List<SeatDto>>")
+    @Operation(summary = "Get seats by screen")
     @GetMapping("/screen/{screenId}")
-    public ResponseEntity<List<SeatDto>> getSeatsByScreen(@PathVariable Long screenId) {
+    public ResponseEntity<List<SeatResponse>> getSeatsByScreen(@PathVariable Long screenId) {
         return ResponseEntity.ok(seatService.getSeatsByScreen(screenId));
     }
 }

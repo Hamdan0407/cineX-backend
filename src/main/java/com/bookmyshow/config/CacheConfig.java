@@ -1,6 +1,9 @@
 package com.bookmyshow.config;
 
 import com.bookmyshow.cache.StatsTrackingCacheManager;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cache.CacheManager;
@@ -45,10 +48,15 @@ public class CacheConfig {
                 }
 
                 // Configure Redis serialization and TTLs
+                ObjectMapper redisMapper = new ObjectMapper();
+                redisMapper.registerModule(new JavaTimeModule());
+                redisMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+                GenericJackson2JsonRedisSerializer valueSerializer = new GenericJackson2JsonRedisSerializer(redisMapper);
+
                 RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                         .entryTtl(Duration.ofMinutes(60)) // Default TTL 60 mins
                         .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                        .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer()))
+                        .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(valueSerializer))
                         .disableCachingNullValues();
 
                 Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
@@ -56,6 +64,9 @@ public class CacheConfig {
                 cacheConfigurations.put("tmdbNowPlaying", defaultConfig.entryTtl(Duration.ofMinutes(60)));
                 cacheConfigurations.put("tmdbTrending", defaultConfig.entryTtl(Duration.ofMinutes(60)));
                 cacheConfigurations.put("tmdbUpcoming", defaultConfig.entryTtl(Duration.ofMinutes(60)));
+                cacheConfigurations.put("tmdbMovieDetails", defaultConfig.entryTtl(Duration.ofMinutes(60)));
+                cacheConfigurations.put("tmdbMovieCredits", defaultConfig.entryTtl(Duration.ofMinutes(60)));
+                cacheConfigurations.put("tmdbMovieSimilar", defaultConfig.entryTtl(Duration.ofMinutes(60)));
                 // Database entity caches
                 cacheConfigurations.put("movies", defaultConfig.entryTtl(Duration.ofMinutes(30)));
                 cacheConfigurations.put("movieDetails", defaultConfig.entryTtl(Duration.ofMinutes(30)));

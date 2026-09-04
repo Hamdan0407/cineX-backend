@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <property name="LOG_PATH" value="logs"/>
+    <property name="LOG_PATH" value="${LOG_PATH:-logs}"/>
     <property name="LOG_ARCHIVE" value="${LOG_PATH}/archived"/>
     <property name="CONSOLE_LOG_PATTERN"
               value="%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr([%15.15t]){faint} %clr([traceId=%X{traceId:-NONE} userId=%X{userId:-NONE}]){yellow} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"/>

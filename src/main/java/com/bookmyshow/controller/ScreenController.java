@@ -1,6 +1,7 @@
 package com.bookmyshow.controller;
 
-import com.bookmyshow.dto.ScreenDto;
+import com.bookmyshow.dto.ScreenRequest;
+import com.bookmyshow.dto.ScreenResponse;
 import com.bookmyshow.service.ScreenService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,37 +24,23 @@ public class ScreenController {
         this.adminAuthService = adminAuthService;
     }
 
-    @Operation(summary = "@PostMapping operation for ResponseEntity<?>")
+    @Operation(summary = "Create screen")
     @PostMapping
-    public ResponseEntity<?> addScreen(@Valid @RequestBody ScreenDto dto,
-                                       @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                       @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        try {
-            adminAuthService.validateAdmin();
-            return new ResponseEntity<>(screenService.addScreen(dto), HttpStatus.CREATED);
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
+    public ResponseEntity<ScreenResponse> addScreen(@Valid @RequestBody ScreenRequest request) {
+        adminAuthService.validateAdmin();
+        return new ResponseEntity<>(screenService.addScreen(request), HttpStatus.CREATED);
     }
 
     @Operation(summary = "Update screen")
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateScreen(@PathVariable Long id, @Valid @RequestBody ScreenDto dto,
-                                          @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                          @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        try {
-            adminAuthService.validateAdmin();
-            return ResponseEntity.ok(screenService.updateScreen(id, dto));
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
+    public ResponseEntity<ScreenResponse> updateScreen(@PathVariable Long id, @Valid @RequestBody ScreenRequest request) {
+        adminAuthService.validateAdmin();
+        return ResponseEntity.ok(screenService.updateScreen(id, request));
     }
 
     @Operation(summary = "Delete screen")
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteScreen(@PathVariable Long id,
-                                          @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                          @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
+    public ResponseEntity<?> deleteScreen(@PathVariable Long id) {
         adminAuthService.validateAdmin();
         screenService.deleteScreen(id);
         return ResponseEntity.ok("Screen deleted successfully");
@@ -61,13 +48,13 @@ public class ScreenController {
 
     @Operation(summary = "Get all screens")
     @GetMapping
-    public ResponseEntity<List<ScreenDto>> getAllScreens() {
+    public ResponseEntity<List<ScreenResponse>> getAllScreens() {
         return ResponseEntity.ok(screenService.getAllScreens());
     }
 
-    @Operation(summary = "@GetMapping operation for ResponseEntity<List<ScreenDto>>")
+    @Operation(summary = "Get screens by theatre")
     @GetMapping("/theatre/{theatreId}")
-    public ResponseEntity<List<ScreenDto>> getScreensByTheatreId(@PathVariable Long theatreId) {
+    public ResponseEntity<List<ScreenResponse>> getScreensByTheatreId(@PathVariable Long theatreId) {
         return ResponseEntity.ok(screenService.getScreensByTheatreId(theatreId));
     }
 }

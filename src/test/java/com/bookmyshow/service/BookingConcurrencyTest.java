@@ -10,6 +10,8 @@ import com.bookmyshow.repository.BookingSeatRepository;
 import com.bookmyshow.repository.SeatRepository;
 import com.bookmyshow.repository.ShowRepository;
 import com.bookmyshow.repository.UserRepository;
+import com.bookmyshow.support.ShowInventoryTestSupport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +32,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
-public class BookingConcurrencyTest {
+public class BookingConcurrencyTest extends ShowInventoryTestSupport {
 
     @Autowired
     private BookingService bookingService;
@@ -50,6 +52,11 @@ public class BookingConcurrencyTest {
     @MockitoBean
     private PaymentService paymentService;
 
+    @BeforeEach
+    void seedInventory() {
+        ensureSampleShowInventory();
+    }
+
     @Test
     @DisplayName("Multithreaded concurrency test: exactly one thread should succeed when 10 threads attempt to book the same seat simultaneously")
     public void testConcurrentBooking_PreventsDoubleBooking() throws InterruptedException {
@@ -61,9 +68,7 @@ public class BookingConcurrencyTest {
         user = userRepository.save(user);
 
         // 2. Fetch an existing show and one of its seats
-        List<Show> shows = showRepository.findAll();
-        assertFalse(shows.isEmpty(), "Sample shows must be initialized in the database");
-        Show targetShow = shows.get(0);
+        Show targetShow = requireSampleShow();
 
         List<Seat> screenSeats = seatRepository.findByScreenId(targetShow.getScreen().getId());
         assertFalse(screenSeats.isEmpty(), "Screen must have seats initialized");
@@ -89,7 +94,7 @@ public class BookingConcurrencyTest {
             executor.submit(() -> {
                 try {
                     startLatch.await(); // Hold threads until the start signal
-                    bookingService.createBooking(request);
+                    bookingService.createBooking(request, "concurrency-test-user");
                     successCount.incrementAndGet();
                 } catch (SeatAlreadyBookedException | PessimisticLockingFailureException e) {
                     // Expected concurrency failure when another thread wins the lock and completes booking

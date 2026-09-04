@@ -1,12 +1,8 @@
 package com.bookmyshow.dto;
 
-import lombok.Data;
-
-@Data
-public class SeatDto {
-    private Long id;
-    private String seatNumber;
-    private String seatType;
-    private Double price;
-    private Long screenId;
+/**
+ * @deprecated Use {@link SeatRequest} for writes and {@link SeatResponse} for reads.
+ */
+@Deprecated
+public class SeatDto extends SeatResponse {
 }

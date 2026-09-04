@@ -1,7 +1,10 @@
 package com.bookmyshow.controller;
 
-import com.bookmyshow.dto.ShowDto;
+import com.bookmyshow.dto.ShowRequest;
+import com.bookmyshow.dto.ShowResponse;
 import com.bookmyshow.dto.ShowSeatDto;
+import com.bookmyshow.dto.BookableMovieResponse;
+import com.bookmyshow.dto.CityShowAvailabilityResponse;
 import com.bookmyshow.service.ShowService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,37 +31,23 @@ public class ShowController {
         this.adminAuthService = adminAuthService;
     }
 
-    @Operation(summary = "@PostMapping operation for ResponseEntity<?>")
+    @Operation(summary = "Create show")
     @PostMapping
-    public ResponseEntity<?> createShow(@Valid @RequestBody ShowDto showDto,
-                                        @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                        @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        try {
-            adminAuthService.validateAdmin();
-            return new ResponseEntity<>(showService.addShow(showDto), HttpStatus.CREATED);
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
+    public ResponseEntity<ShowResponse> createShow(@Valid @RequestBody ShowRequest request) {
+        adminAuthService.validateAdmin();
+        return new ResponseEntity<>(showService.addShow(request), HttpStatus.CREATED);
     }
 
     @Operation(summary = "Update show")
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateShow(@PathVariable Long id, @Valid @RequestBody ShowDto showDto,
-                                        @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                        @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
-        try {
-            adminAuthService.validateAdmin();
-            return ResponseEntity.ok(showService.updateShow(id, showDto));
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
+    public ResponseEntity<ShowResponse> updateShow(@PathVariable Long id, @Valid @RequestBody ShowRequest request) {
+        adminAuthService.validateAdmin();
+        return ResponseEntity.ok(showService.updateShow(id, request));
     }
 
     @Operation(summary = "Delete show")
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteShow(@PathVariable Long id,
-                                        @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
-                                        @RequestHeader(value = "X-User-Email", required = false) String emailHeader) {
+    public ResponseEntity<?> deleteShow(@PathVariable Long id) {
         adminAuthService.validateAdmin();
         showService.deleteShow(id);
         return ResponseEntity.ok("Show deleted successfully");
@@ -69,8 +58,33 @@ public class ShowController {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved shows list")
     })
     @GetMapping
-    public ResponseEntity<List<ShowDto>> getAllShows() {
+    public ResponseEntity<List<ShowResponse>> getAllShows() {
         return ResponseEntity.ok(showService.getAllShows());
+    }
+
+    @Operation(summary = "Get TMDB movie availability in a city")
+    @GetMapping("/availability")
+    public ResponseEntity<CityShowAvailabilityResponse> getCityAvailability(
+            @RequestParam String city,
+            @RequestParam(required = false) String language) {
+        return ResponseEntity.ok(showService.getCityAvailability(city, language));
+    }
+
+    @Operation(summary = "Get bookable movies with CineX show metadata for a city")
+    @GetMapping("/bookable-movies")
+    public ResponseEntity<List<BookableMovieResponse>> getBookableMovies(
+            @RequestParam String city,
+            @RequestParam(required = false) String language) {
+        return ResponseEntity.ok(showService.getBookableMovies(city, language));
+    }
+
+    @Operation(summary = "Get shows by TMDB movie ID for a city")
+    @GetMapping("/tmdb/{tmdbId}")
+    public ResponseEntity<List<ShowResponse>> getShowsByTmdbId(
+            @PathVariable Long tmdbId,
+            @RequestParam String city,
+            @RequestParam(required = false) String language) {
+        return ResponseEntity.ok(showService.getShowsByTmdbId(tmdbId, city, language));
     }
 
     @Operation(summary = "Get shows by movie ID", description = "Fetches active shows for a specific movie.")
@@ -78,8 +92,11 @@ public class ShowController {
         @ApiResponse(responseCode = "200", description = "Successfully retrieved movie shows")
     })
     @GetMapping("/movie/{movieId}")
-    public ResponseEntity<List<ShowDto>> getShowsByMovie(@PathVariable Long movieId) {
-        return ResponseEntity.ok(showService.getShowsByMovie(movieId));
+    public ResponseEntity<List<ShowResponse>> getShowsByMovie(
+            @PathVariable Long movieId,
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) String language) {
+        return ResponseEntity.ok(showService.getShowsByMovie(movieId, city, language));
     }
 
     @Operation(summary = "Get seating layout and availability for a show", description = "Returns seat tiers, prices, and blocked/booked status for a specific show ID.")
@@ -88,17 +105,13 @@ public class ShowController {
         @ApiResponse(responseCode = "404", description = "Show not found")
     })
     @GetMapping("/{showId}/seats")
-    public ResponseEntity<?> getShowSeats(@PathVariable Long showId) {
-        try {
-            return ResponseEntity.ok(showService.getShowSeats(showId));
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
-        }
+    public ResponseEntity<List<ShowSeatDto>> getShowSeats(@PathVariable Long showId) {
+        return ResponseEntity.ok(showService.getShowSeats(showId));
     }
 
     @Operation(summary = "Get paginated shows with size and sorting")
     @GetMapping("/paginated")
-    public ResponseEntity<Page<ShowDto>> getShowsPaginated(
+    public ResponseEntity<Page<ShowResponse>> getShowsPaginated(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "showDate") String sortBy,
@@ -108,7 +121,7 @@ public class ShowController {
 
     @Operation(summary = "Search paginated shows by movieId with size and sorting")
     @GetMapping("/search/paginated")
-    public ResponseEntity<Page<ShowDto>> searchShowsPaginated(
+    public ResponseEntity<Page<ShowResponse>> searchShowsPaginated(
             @RequestParam(required = false) Long movieId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,

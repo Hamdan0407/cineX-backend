@@ -1,16 +1,8 @@
 package com.bookmyshow.dto;
 
-import lombok.Data;
-import java.time.LocalDate;
-import java.time.LocalTime;
-
-@Data
-public class ShowDto {
-    private Long id;
-    private Long movieId;
-    private Long screenId;
-    private LocalTime showTime;
-    private LocalDate showDate;
-    private Double price;
-    private Integer availableSeats;
+/**
+ * @deprecated Use {@link ShowRequest} for writes and {@link ShowResponse} for reads.
+ */
+@Deprecated
+public class ShowDto extends ShowResponse {
 }

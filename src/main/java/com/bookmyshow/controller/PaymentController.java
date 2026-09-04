@@ -1,6 +1,7 @@
 package com.bookmyshow.controller;
 
 import com.bookmyshow.dto.*;
+import com.bookmyshow.service.AdminAuthService;
 import com.bookmyshow.service.PaymentService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -17,9 +18,11 @@ import java.util.Map;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final AdminAuthService adminAuthService;
 
-    public PaymentController(PaymentService paymentService) {
+    public PaymentController(PaymentService paymentService, AdminAuthService adminAuthService) {
         this.paymentService = paymentService;
+        this.adminAuthService = adminAuthService;
     }
 
     @Operation(summary = "Create Razorpay order for booking")
@@ -34,16 +37,23 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.verifyPayment(request));
     }
 
+    @Operation(summary = "Pay for a held booking with CineX Wallet")
+    @PostMapping("/wallet")
+    public ResponseEntity<PaymentResponse> payWithWallet(@RequestParam Long bookingId) {
+        return ResponseEntity.ok(paymentService.payWithWallet(bookingId));
+    }
+
     @Operation(summary = "Cancel payment or handle timeout")
     @PostMapping("/cancel")
-    public ResponseEntity<Map<String, String>> cancelPayment(@RequestParam Long bookingId, @RequestParam(required = false) String clerkUserId) {
-        paymentService.cancelPayment(bookingId, clerkUserId);
+    public ResponseEntity<Map<String, String>> cancelPayment(@RequestParam Long bookingId) {
+        paymentService.cancelPayment(bookingId, adminAuthService.getAuthenticatedClerkUserId());
         return ResponseEntity.ok(Map.of("status", "CANCELLED", "message", "Payment cancelled"));
     }
 
     @Operation(summary = "Get payments by booking ID")
     @GetMapping("/booking/{bookingId}")
     public ResponseEntity<List<PaymentDto>> getPaymentsByBookingId(@PathVariable Long bookingId) {
+        adminAuthService.validateBookingAccess(bookingId);
         return ResponseEntity.ok(paymentService.getPaymentsByBookingId(bookingId));
     }
 }

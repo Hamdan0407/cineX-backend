@@ -1,6 +1,7 @@
 package com.bookmyshow.controller;
 
 import com.bookmyshow.dto.TicketVerificationResponse;
+import com.bookmyshow.service.AdminAuthService;
 import com.bookmyshow.service.TicketService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,14 +17,17 @@ import org.springframework.web.bind.annotation.*;
 public class TicketController {
 
     private final TicketService ticketService;
+    private final AdminAuthService adminAuthService;
 
-    public TicketController(TicketService ticketService) {
+    public TicketController(TicketService ticketService, AdminAuthService adminAuthService) {
         this.ticketService = ticketService;
+        this.adminAuthService = adminAuthService;
     }
 
     @GetMapping("/verify/{ticketToken}")
     @Operation(summary = "Verify a ticket token and return booking details if valid")
     public ResponseEntity<TicketVerificationResponse> verifyTicket(@PathVariable String ticketToken) {
+        adminAuthService.validateTicketAccess(ticketToken);
         TicketVerificationResponse response = ticketService.verifyTicket(ticketToken);
         if ("INVALID TICKET".equals(response.getVerificationStatus())) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
@@ -34,6 +38,7 @@ public class TicketController {
     @GetMapping(value = "/qr/{ticketToken}", produces = MediaType.IMAGE_PNG_VALUE)
     @Operation(summary = "Generate dynamic QR code PNG image for a ticket token")
     public ResponseEntity<byte[]> getQrCodeImage(@PathVariable String ticketToken) {
+        adminAuthService.validateTicketAccess(ticketToken);
         byte[] imageBytes = ticketService.generateQrCodeImage(ticketToken, 250, 250);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.IMAGE_PNG);
@@ -43,8 +48,9 @@ public class TicketController {
 
     @GetMapping(value = "/download/{ticketToken}", produces = MediaType.APPLICATION_PDF_VALUE)
     @Operation(summary = "Download professional PDF ticket by ticket token")
-    public ResponseEntity<byte[]> downloadPdfTicket(@PathVariable String ticketToken,
-                                                    @RequestParam(required = false) String clerkUserId) {
+    public ResponseEntity<byte[]> downloadPdfTicket(@PathVariable String ticketToken) {
+        adminAuthService.validateTicketAccess(ticketToken);
+        String clerkUserId = adminAuthService.getAuthenticatedClerkUserId();
         byte[] pdfBytes = ticketService.generatePdfTicket(ticketToken, clerkUserId);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_PDF);
@@ -54,8 +60,9 @@ public class TicketController {
 
     @GetMapping(value = "/download-by-booking/{bookingId}", produces = MediaType.APPLICATION_PDF_VALUE)
     @Operation(summary = "Download professional PDF ticket by booking ID")
-    public ResponseEntity<byte[]> downloadPdfTicketByBookingId(@PathVariable Long bookingId,
-                                                               @RequestParam(required = false) String clerkUserId) {
+    public ResponseEntity<byte[]> downloadPdfTicketByBookingId(@PathVariable Long bookingId) {
+        adminAuthService.validateBookingAccess(bookingId);
+        String clerkUserId = adminAuthService.getAuthenticatedClerkUserId();
         byte[] pdfBytes = ticketService.generatePdfTicketByBookingId(bookingId, clerkUserId);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_PDF);

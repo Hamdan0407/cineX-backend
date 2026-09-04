@@ -25,4 +25,6 @@ public class Show {
     private LocalDate showDate;
     private Double price;
     private Integer availableSeats;
+    /** Screening language for this showtime (e.g. Hindi, English, Tamil). */
+    private String screeningLanguage;
 }

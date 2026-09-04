@@ -18,6 +18,10 @@ public class Seat {
     private String seatNumber;
     private String seatType;
     private Double price;
+    private String rowLabel;
+    private Integer rowIndex;
+    private Integer columnIndex;
+    private Boolean wheelchairAccessible;
     @ManyToOne
     private Screen screen;
 }

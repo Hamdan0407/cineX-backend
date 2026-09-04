@@ -1,6 +1,9 @@
 package com.bookmyshow.service;
 
 import com.bookmyshow.dto.ScreenDto;
+import com.bookmyshow.dto.ScreenRequest;
+import com.bookmyshow.dto.ScreenResponse;
+import com.bookmyshow.dto.mapper.ScreenMapper;
 import com.bookmyshow.entity.Screen;
 import com.bookmyshow.entity.Theatre;
 import com.bookmyshow.repository.ScreenRepository;
@@ -22,39 +25,33 @@ public class ScreenService {
         this.theatreRepository = theatreRepository;
     }
 
-    public ScreenDto addScreen(ScreenDto dto) {
-        Theatre theatre = theatreRepository.findById(dto.getTheatreId())
+    public ScreenResponse addScreen(ScreenRequest request) {
+        Theatre theatre = theatreRepository.findById(request.getTheatreId())
             .orElseThrow(() -> new ResourceNotFoundException("Theatre not found"));
-
-        Screen screen = new Screen();
-        screen.setScreenName(dto.getScreenName());
-        screen.setTotalSeats(dto.getTotalSeats());
-        screen.setTotalRows(dto.getTotalRows() != null ? dto.getTotalRows() : 10);
-        screen.setTotalColumns(dto.getTotalColumns() != null ? dto.getTotalColumns() : 10);
-        screen.setSeatCategories(dto.getSeatCategories() != null ? dto.getSeatCategories() : "VIP,Executive,Premium,Recliner,Gold,Silver");
-        screen.setTheatre(theatre);
-        
-        Screen saved = screenRepository.save(screen);
-        return mapToDto(saved);
+        Screen saved = screenRepository.save(ScreenMapper.toNewEntity(request, theatre));
+        return ScreenMapper.toResponse(saved);
     }
 
-    public ScreenDto updateScreen(Long id, ScreenDto dto) {
+    @Deprecated
+    public ScreenResponse addScreen(ScreenDto dto) {
+        return addScreen(ScreenMapper.toRequest(dto));
+    }
+
+    public ScreenResponse updateScreen(Long id, ScreenRequest request) {
         Screen screen = screenRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Screen not found"));
-        screen.setScreenName(dto.getScreenName());
-        screen.setTotalSeats(dto.getTotalSeats());
-        if (dto.getTotalRows() != null) screen.setTotalRows(dto.getTotalRows());
-        if (dto.getTotalColumns() != null) screen.setTotalColumns(dto.getTotalColumns());
-        if (dto.getSeatCategories() != null) screen.setSeatCategories(dto.getSeatCategories());
-
-        if (dto.getTheatreId() != null && !dto.getTheatreId().equals(screen.getTheatre().getId())) {
-            Theatre theatre = theatreRepository.findById(dto.getTheatreId())
+        Theatre theatre = null;
+        if (request.getTheatreId() != null && !request.getTheatreId().equals(screen.getTheatre().getId())) {
+            theatre = theatreRepository.findById(request.getTheatreId())
                 .orElseThrow(() -> new ResourceNotFoundException("Theatre not found"));
-            screen.setTheatre(theatre);
         }
+        ScreenMapper.applyUpdate(screen, request, theatre);
+        return ScreenMapper.toResponse(screenRepository.save(screen));
+    }
 
-        Screen updated = screenRepository.save(screen);
-        return mapToDto(updated);
+    @Deprecated
+    public ScreenResponse updateScreen(Long id, ScreenDto dto) {
+        return updateScreen(id, ScreenMapper.toRequest(dto));
     }
 
     public void deleteScreen(Long id) {
@@ -64,24 +61,12 @@ public class ScreenService {
         screenRepository.deleteById(id);
     }
 
-    public List<ScreenDto> getAllScreens() {
-        return screenRepository.findAll().stream().map(this::mapToDto).collect(Collectors.toList());
+    public List<ScreenResponse> getAllScreens() {
+        return screenRepository.findAll().stream().map(ScreenMapper::toResponse).collect(Collectors.toList());
     }
 
-    public List<ScreenDto> getScreensByTheatreId(Long theatreId) {
+    public List<ScreenResponse> getScreensByTheatreId(Long theatreId) {
         return screenRepository.findByTheatreId(theatreId)
-            .stream().map(this::mapToDto).collect(Collectors.toList());
-    }
-
-    private ScreenDto mapToDto(Screen screen) {
-        ScreenDto dto = new ScreenDto();
-        dto.setId(screen.getId());
-        dto.setScreenName(screen.getScreenName());
-        dto.setTotalSeats(screen.getTotalSeats());
-        dto.setTotalRows(screen.getTotalRows());
-        dto.setTotalColumns(screen.getTotalColumns());
-        dto.setSeatCategories(screen.getSeatCategories());
-        dto.setTheatreId(screen.getTheatre().getId());
-        return dto;
+            .stream().map(ScreenMapper::toResponse).collect(Collectors.toList());
     }
 }

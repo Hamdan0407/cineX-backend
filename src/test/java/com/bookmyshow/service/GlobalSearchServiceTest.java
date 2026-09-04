@@ -1,9 +1,11 @@
 package com.bookmyshow.service;
 
 import com.bookmyshow.dto.BookingResponse;
-import com.bookmyshow.dto.MovieDto;
-import com.bookmyshow.dto.ShowDto;
-import com.bookmyshow.dto.TheatreDto;
+import com.bookmyshow.dto.MovieRequest;
+import com.bookmyshow.dto.MovieResponse;
+import com.bookmyshow.dto.ShowResponse;
+import com.bookmyshow.dto.TheatreRequest;
+import com.bookmyshow.dto.TheatreResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,7 +36,7 @@ public class GlobalSearchServiceTest {
     @Test
     @DisplayName("Verify Global Search and Sorting on MovieService")
     void testMovieGlobalSearchAndSorting() {
-        MovieDto m1 = new MovieDto();
+        MovieRequest m1 = new MovieRequest();
         m1.setTitle("Avengers Sci-Fi Epic");
         m1.setDescription("Action superhero movie");
         m1.setDuration(180);
@@ -43,7 +45,7 @@ public class GlobalSearchServiceTest {
         m1.setReleaseDate(LocalDate.now());
         movieService.addMovie(m1);
 
-        MovieDto m2 = new MovieDto();
+        MovieRequest m2 = new MovieRequest();
         m2.setTitle("Bahubali Drama");
         m2.setDescription("Epic war movie");
         m2.setDuration(160);
@@ -52,15 +54,15 @@ public class GlobalSearchServiceTest {
         m2.setReleaseDate(LocalDate.now());
         movieService.addMovie(m2);
 
-        Page<MovieDto> searchByTitle = movieService.searchMoviesPaginated("Avengers", 0, 10, "id", "asc");
+        Page<MovieResponse> searchByTitle = movieService.searchMoviesPaginated("Avengers", 0, 10, "id", "asc");
         assertNotNull(searchByTitle);
         assertTrue(searchByTitle.getTotalElements() >= 1, "Should find Avengers by title");
 
-        Page<MovieDto> searchByGenre = movieService.searchMoviesPaginated("Sci-Fi", 0, 10, "id", "asc");
+        Page<MovieResponse> searchByGenre = movieService.searchMoviesPaginated("Sci-Fi", 0, 10, "id", "asc");
         assertNotNull(searchByGenre);
         assertTrue(searchByGenre.getTotalElements() >= 1, "Should find Avengers by genre");
 
-        Page<MovieDto> searchByLanguage = movieService.searchMoviesPaginated("Telugu", 0, 10, "id", "asc");
+        Page<MovieResponse> searchByLanguage = movieService.searchMoviesPaginated("Telugu", 0, 10, "id", "asc");
         assertNotNull(searchByLanguage);
         assertTrue(searchByLanguage.getTotalElements() >= 1, "Should find Bahubali by language");
     }
@@ -68,17 +70,17 @@ public class GlobalSearchServiceTest {
     @Test
     @DisplayName("Verify Global Search on TheatreService")
     void testTheatreGlobalSearch() {
-        TheatreDto t1 = new TheatreDto();
+        TheatreRequest t1 = new TheatreRequest();
         t1.setName("PVR Cyberhub IMAX");
         t1.setCity("Gurugram");
         t1.setAddress("DLF Cyber City");
         theatreService.addTheatre(t1);
 
-        Page<TheatreDto> searchByName = theatreService.searchTheatresPaginated("Cyberhub", 0, 10, "name", "asc");
+        Page<TheatreResponse> searchByName = theatreService.searchTheatresPaginated("Cyberhub", 0, 10, "name", "asc");
         assertNotNull(searchByName);
         assertTrue(searchByName.getTotalElements() >= 1, "Should find PVR by name");
 
-        Page<TheatreDto> searchByCity = theatreService.searchTheatresPaginated("Gurugram", 0, 10, "name", "asc");
+        Page<TheatreResponse> searchByCity = theatreService.searchTheatresPaginated("Gurugram", 0, 10, "name", "asc");
         assertNotNull(searchByCity);
         assertTrue(searchByCity.getTotalElements() >= 1, "Should find PVR by city");
     }
@@ -86,7 +88,7 @@ public class GlobalSearchServiceTest {
     @Test
     @DisplayName("Verify Global Search on ShowService")
     void testShowGlobalSearch() {
-        Page<ShowDto> page = showService.searchShowsPaginated(null, 0, 10, "id", "asc");
+        Page<ShowResponse> page = showService.searchShowsPaginated(null, 0, 10, "id", "asc");
         assertNotNull(page);
     }
 

@@ -32,13 +32,12 @@ public class MdcLoggingFilter extends OncePerRequestFilter {
             MDC.put(MDC_TRACE_ID_KEY, traceId);
             response.setHeader(TRACE_ID_HEADER, traceId);
 
+            // Never derive userId from the Authorization header: that wrote a slice of the raw
+            // Clerk JWT into every log line. ClerkJwtAuthenticationFilter overwrites this with the
+            // verified subject once the token is validated, so unverified requests stay unattributed.
             String authHeader = request.getHeader("Authorization");
-            if (authHeader != null && !authHeader.trim().isEmpty()) {
-                String userId = authHeader.replace("Bearer ", "").trim();
-                MDC.put(MDC_USER_ID_KEY, userId.length() > 24 ? userId.substring(0, 24) : userId);
-            } else {
-                MDC.put(MDC_USER_ID_KEY, "ANONYMOUS");
-            }
+            boolean bearerPresented = authHeader != null && authHeader.startsWith("Bearer ");
+            MDC.put(MDC_USER_ID_KEY, bearerPresented ? "UNVERIFIED_BEARER" : "ANONYMOUS");
 
             filterChain.doFilter(request, response);
         } finally {

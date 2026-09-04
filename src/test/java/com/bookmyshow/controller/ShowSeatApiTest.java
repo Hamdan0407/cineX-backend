@@ -1,7 +1,8 @@
 package com.bookmyshow.controller;
 
 import com.bookmyshow.entity.Show;
-import com.bookmyshow.repository.ShowRepository;
+import com.bookmyshow.support.ShowInventoryTestSupport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -14,14 +15,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class ShowSeatApiTest {
+class ShowSeatApiTest extends ShowInventoryTestSupport {
 
     @Autowired private MockMvc mockMvc;
-    @Autowired private ShowRepository showRepository;
+
+    @BeforeEach
+    void seedInventory() {
+        ensureSampleShowInventory();
+    }
 
     @Test
     void showApiReturnsShowsForMovie() throws Exception {
-        Show show = showRepository.findAll().get(0);
+        Show show = requireSampleShow();
 
         mockMvc.perform(get("/api/shows/movie/{movieId}", show.getMovie().getId()))
                 .andExpect(status().isOk())
@@ -32,12 +37,15 @@ class ShowSeatApiTest {
 
     @Test
     void seatApiReturnsSeatsForShowScreen() throws Exception {
-        Show show = showRepository.findAll().get(0);
+        Show show = requireSampleShow();
 
         mockMvc.perform(get("/api/shows/{showId}/seats", show.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].seatId").isNumber())
                 .andExpect(jsonPath("$[0].seatNumber").isString())
+                .andExpect(jsonPath("$[0].rowIndex").isNumber())
+                .andExpect(jsonPath("$[0].columnIndex").isNumber())
+                .andExpect(jsonPath("$.length()").value(org.hamcrest.Matchers.greaterThan(20)))
                 .andExpect(jsonPath("$[0].status").value("AVAILABLE"));
     }
 }

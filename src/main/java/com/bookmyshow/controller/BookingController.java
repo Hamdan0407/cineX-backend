@@ -34,13 +34,10 @@ public class BookingController {
         @ApiResponse(responseCode = "400", description = "Seats already booked or invalid request")
     })
     @PostMapping
-    public ResponseEntity<?> createBooking(@Valid @RequestBody BookingRequest request) {
-        try {
-            BookingResponse response = bookingService.createBooking(request);
-            return new ResponseEntity<>(response, HttpStatus.CREATED);
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
+    public ResponseEntity<BookingResponse> createBooking(@Valid @RequestBody BookingRequest request) {
+        String authenticatedClerkUserId = adminAuthService.getAuthenticatedClerkUserId();
+        BookingResponse response = bookingService.createBooking(request, authenticatedClerkUserId);
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
     @Operation(summary = "Get all bookings (Admin only)")
@@ -82,15 +79,11 @@ public class BookingController {
 
     @Operation(summary = "Update booking status (Admin only)")
     @PutMapping("/{bookingId}/status")
-    public ResponseEntity<?> updateBookingStatus(@PathVariable Long bookingId,
+    public ResponseEntity<BookingResponse> updateBookingStatus(@PathVariable Long bookingId,
                                                  @RequestParam(required = false) String bookingStatus,
                                                  @RequestParam(required = false) String paymentStatus) {
-        try {
-            adminAuthService.validateAdmin();
-            return ResponseEntity.ok(bookingService.updateBookingStatus(bookingId, bookingStatus, paymentStatus));
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
+        adminAuthService.validateAdmin();
+        return ResponseEntity.ok(bookingService.updateBookingStatus(bookingId, bookingStatus, paymentStatus));
     }
 
     @Operation(summary = "Get booking by ID", description = "Fetches complete booking details including seat numbers, payment status, and QR ticket token.")
@@ -99,12 +92,14 @@ public class BookingController {
         @ApiResponse(responseCode = "404", description = "Booking not found")
     })
     @GetMapping("/{bookingId}")
-    public ResponseEntity<?> getBooking(@PathVariable Long bookingId) {
-        try {
-            return ResponseEntity.ok(bookingService.getBooking(bookingId));
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+    public ResponseEntity<BookingResponse> getBooking(@PathVariable Long bookingId) {
+        BookingResponse booking = bookingService.getBooking(bookingId);
+        if (booking.getClerkUserId() != null) {
+            adminAuthService.validateOwnershipOrAdmin(booking.getClerkUserId());
+        } else {
+            adminAuthService.validateAdmin();
         }
+        return ResponseEntity.ok(booking);
     }
 
     @Operation(summary = "Get bookings by User ID", description = "Retrieves booking history for a database User ID.")
@@ -113,6 +108,7 @@ public class BookingController {
     })
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<BookingResponse>> getUserBookings(@PathVariable Long userId) {
+        adminAuthService.validateUserIdOwnership(userId);
         return ResponseEntity.ok(bookingService.getUserBookings(userId));
     }
 
@@ -133,15 +129,13 @@ public class BookingController {
     })
     @DeleteMapping("/{bookingId}")
     public ResponseEntity<?> cancelBooking(@PathVariable Long bookingId) {
-        try {
-            BookingResponse booking = bookingService.getBooking(bookingId);
-            if (booking.getClerkUserId() != null) {
-                adminAuthService.validateOwnershipOrAdmin(booking.getClerkUserId());
-            }
-            bookingService.cancelBooking(bookingId);
-            return ResponseEntity.ok("Booking cancelled successfully");
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        BookingResponse booking = bookingService.getBooking(bookingId);
+        if (booking.getClerkUserId() != null) {
+            adminAuthService.validateOwnershipOrAdmin(booking.getClerkUserId());
+        } else {
+            adminAuthService.validateAdmin();
         }
+        bookingService.cancelBooking(bookingId);
+        return ResponseEntity.ok("Booking cancelled successfully");
     }
 }

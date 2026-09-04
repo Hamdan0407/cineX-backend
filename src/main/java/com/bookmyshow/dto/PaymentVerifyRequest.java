@@ -2,6 +2,7 @@ package com.bookmyshow.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -11,6 +12,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class PaymentVerifyRequest {
     @NotNull(message = "Booking ID is required")
+    @Positive(message = "Booking ID must be positive")
     private Long bookingId;
 
     private String clerkUserId;
